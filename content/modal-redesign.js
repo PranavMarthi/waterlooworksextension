@@ -392,31 +392,94 @@
     isActive = true;
 
     const closeAll = () => {
+      console.log('[WAW] closeAll() called');
+      
+      // Remove our overlay
       if (overlay) { overlay.remove(); overlay = null; }
       document.body.classList.remove('waw-active');
-      document.body.style.overflow = ''; // Reset any inline overflow
       isActive = false;
       document.removeEventListener('keydown', keyHandler);
       
       // Close the hidden WaterlooWorks modal
       const closeBtn = document.querySelector('button[aria-label="Close"], .modal__close');
-      if (closeBtn) closeBtn.click();
+      if (closeBtn) {
+        console.log('[WAW] Clicking WW close button');
+        closeBtn.click();
+      }
       
-      // Ensure body scroll is restored after WW modal closes
-      setTimeout(() => {
+      // Aggressive scroll restoration function
+      const forceEnableScroll = () => {
+        // Reset body styles
         document.body.style.overflow = '';
-        document.body.classList.remove('waw-active');
+        document.body.style.overflowX = '';
+        document.body.style.overflowY = '';
+        document.body.style.position = '';
+        document.body.style.top = '';
+        document.body.style.left = '';
+        document.body.style.right = '';
+        document.body.style.width = '';
+        document.body.style.height = '';
+        
+        // Reset html/documentElement styles
         document.documentElement.style.overflow = '';
-      }, 100);
+        document.documentElement.style.overflowX = '';
+        document.documentElement.style.overflowY = '';
+        document.documentElement.style.position = '';
+        
+        // Remove any modal-related classes from body
+        document.body.classList.remove('modal-open', 'overflow-hidden', 'waw-active', 'no-scroll');
+        
+        // Also check for any elements with overflow:hidden and remove it
+        if (getComputedStyle(document.body).overflow === 'hidden') {
+          document.body.style.setProperty('overflow', 'auto', 'important');
+        }
+        if (getComputedStyle(document.documentElement).overflow === 'hidden') {
+          document.documentElement.style.setProperty('overflow', 'auto', 'important');
+        }
+      };
+      
+      // Run immediately
+      forceEnableScroll();
+      
+      // Run multiple times with delays to catch any re-adds
+      setTimeout(forceEnableScroll, 50);
+      setTimeout(forceEnableScroll, 150);
+      setTimeout(forceEnableScroll, 300);
+      setTimeout(forceEnableScroll, 500);
+      
+      // Keep checking for 2 seconds with an interval
+      let checks = 0;
+      const scrollInterval = setInterval(() => {
+        forceEnableScroll();
+        checks++;
+        if (checks >= 10) {
+          clearInterval(scrollInterval);
+          console.log('[WAW] Scroll restoration complete');
+        }
+      }, 200);
+      
+      console.log('[WAW] closeAll() finished setup');
     };
 
     const nav = (dir) => {
       console.log('[WAW] nav() called, direction:', dir);
       if (overlay) { overlay.remove(); overlay = null; }
       document.body.classList.remove('waw-active');
-      document.body.style.overflow = ''; // Reset any inline overflow
       isActive = false;
       document.removeEventListener('keydown', keyHandler);
+      
+      // Aggressively reset scroll
+      const resetScroll = () => {
+        document.body.style.overflow = '';
+        document.body.style.overflowX = '';
+        document.body.style.overflowY = '';
+        document.body.style.position = '';
+        document.documentElement.style.overflow = '';
+        document.documentElement.style.overflowX = '';
+        document.documentElement.style.overflowY = '';
+        document.body.classList.remove('modal-open', 'overflow-hidden', 'waw-active');
+      };
+      resetScroll();
       
       // Use our own navigation
       navigateToJob(dir);
