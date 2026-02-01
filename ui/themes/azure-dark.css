@@ -1,0 +1,187 @@
+/**
+ * Azure Dark Theme
+ * Dark mode theme for WaterlooWorks Azure
+ */
+
+[data-azure-theme="azure-dark"],
+.azure-dark[data-azure-theme="azure-light"] {
+  --azure-primary: #5bc0f8;
+  --azure-primary-hover: #7dcefa;
+  --azure-primary-active: #9ddcfc;
+  
+  --azure-bg-primary: #1a1d21;
+  --azure-bg-secondary: #212529;
+  --azure-bg-tertiary: #2d3238;
+  --azure-bg-hover: #343a40;
+  
+  --azure-text-primary: #f8f9fa;
+  --azure-text-secondary: #adb5bd;
+  --azure-text-muted: #6c757d;
+  
+  --azure-border-light: #343a40;
+  --azure-border-medium: #495057;
+  --azure-border-dark: #6c757d;
+  
+  --azure-accent: #5bc0f8;
+  --azure-accent-light: rgba(91, 192, 248, 0.15);
+}
+
+/* Header styling - Dark */
+[data-azure-theme="azure-dark"] header,
+[data-azure-theme="azure-dark"] .header__container,
+.azure-dark header,
+.azure-dark .header__container {
+  background: linear-gradient(135deg, #1a3a4a 0%, #0d2532 100%);
+  color: var(--azure-text-primary);
+}
+
+/* Navigation - Dark */
+[data-azure-theme="azure-dark"] .nav,
+[data-azure-theme="azure-dark"] .navbar,
+.azure-dark .nav,
+.azure-dark .navbar {
+  background-color: var(--azure-bg-secondary);
+  border-bottom: 1px solid var(--azure-border-light);
+}
+
+/* Cards and panels - Dark */
+[data-azure-theme="azure-dark"] .panel,
+[data-azure-theme="azure-dark"] .box,
+[data-azure-theme="azure-dark"] .card,
+.azure-dark .panel,
+.azure-dark .box,
+.azure-dark .card {
+  background-color: var(--azure-bg-secondary);
+  border: 1px solid var(--azure-border-light);
+  color: var(--azure-text-primary);
+}
+
+/* Tables - Dark */
+[data-azure-theme="azure-dark"] .table,
+.azure-dark .table {
+  background-color: var(--azure-bg-secondary);
+  color: var(--azure-text-primary);
+}
+
+[data-azure-theme="azure-dark"] .table thead th,
+.azure-dark .table thead th {
+  background-color: var(--azure-bg-tertiary);
+  border-bottom: 2px solid var(--azure-border-medium);
+  color: var(--azure-text-primary);
+}
+
+[data-azure-theme="azure-dark"] .table tbody tr,
+.azure-dark .table tbody tr {
+  border-bottom: 1px solid var(--azure-border-light);
+}
+
+[data-azure-theme="azure-dark"] .table tbody tr:hover,
+.azure-dark .table tbody tr:hover {
+  background-color: var(--azure-bg-hover);
+}
+
+/* Buttons - Dark */
+[data-azure-theme="azure-dark"] .btn-primary,
+[data-azure-theme="azure-dark"] .btn-info,
+.azure-dark .btn-primary,
+.azure-dark .btn-info {
+  background-color: var(--azure-primary);
+  border-color: var(--azure-primary);
+  color: #1a1d21;
+}
+
+[data-azure-theme="azure-dark"] .btn-primary:hover,
+[data-azure-theme="azure-dark"] .btn-info:hover,
+.azure-dark .btn-primary:hover,
+.azure-dark .btn-info:hover {
+  background-color: var(--azure-primary-hover);
+  border-color: var(--azure-primary-hover);
+}
+
+[data-azure-theme="azure-dark"] .btn-default,
+[data-azure-theme="azure-dark"] .btn-secondary,
+.azure-dark .btn-default,
+.azure-dark .btn-secondary {
+  background-color: var(--azure-bg-tertiary);
+  border-color: var(--azure-border-medium);
+  color: var(--azure-text-primary);
+}
+
+/* Links - Dark */
+[data-azure-theme="azure-dark"] a,
+.azure-dark a {
+  color: var(--azure-primary);
+}
+
+[data-azure-theme="azure-dark"] a:hover,
+.azure-dark a:hover {
+  color: var(--azure-primary-hover);
+}
+
+/* Form elements - Dark */
+[data-azure-theme="azure-dark"] input,
+[data-azure-theme="azure-dark"] select,
+[data-azure-theme="azure-dark"] textarea,
+.azure-dark input,
+.azure-dark select,
+.azure-dark textarea {
+  background-color: var(--azure-bg-tertiary);
+  border: 1px solid var(--azure-border-medium);
+  color: var(--azure-text-primary);
+}
+
+[data-azure-theme="azure-dark"] input:focus,
+[data-azure-theme="azure-dark"] select:focus,
+[data-azure-theme="azure-dark"] textarea:focus,
+.azure-dark input:focus,
+.azure-dark select:focus,
+.azure-dark textarea:focus {
+  border-color: var(--azure-primary);
+  box-shadow: 0 0 0 3px var(--azure-accent-light);
+}
+
+/* Main content area - Dark */
+[data-azure-theme="azure-dark"] #mainContentDiv,
+[data-azure-theme="azure-dark"] .main-content,
+.azure-dark #mainContentDiv,
+.azure-dark .main-content {
+  background-color: var(--azure-bg-primary);
+  color: var(--azure-text-primary);
+}
+
+/* Modals - Dark */
+[data-azure-theme="azure-dark"] .modal-content,
+.azure-dark .modal-content {
+  background-color: var(--azure-bg-secondary);
+  border: 1px solid var(--azure-border-light);
+  color: var(--azure-text-primary);
+}
+
+[data-azure-theme="azure-dark"] .modal-header,
+.azure-dark .modal-header {
+  border-bottom-color: var(--azure-border-light);
+}
+
+[data-azure-theme="azure-dark"] .modal-footer,
+.azure-dark .modal-footer {
+  border-top-color: var(--azure-border-light);
+}
+
+/* Scrollbar - Dark */
+.azure-dark ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.azure-dark ::-webkit-scrollbar-track {
+  background: var(--azure-bg-tertiary);
+}
+
+.azure-dark ::-webkit-scrollbar-thumb {
+  background: var(--azure-border-medium);
+  border-radius: 5px;
+}
+
+.azure-dark ::-webkit-scrollbar-thumb:hover {
+  background: var(--azure-border-dark);
+}

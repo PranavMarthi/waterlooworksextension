@@ -1,0 +1,497 @@
+/**
+ * Modal Redesign Styles for WaterlooActuallyWorks
+ * Full-screen overlay with clean card UI
+ */
+
+/* ============================================
+   Hide Original Modal When Overlay Active
+   ============================================ */
+
+body.waw-overlay-active div[data-v-70e7ded6-s] {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+body.waw-overlay-active {
+  overflow: hidden;
+}
+
+/* ============================================
+   Full-Screen Overlay
+   ============================================ */
+
+.waw-job-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.waw-overlay-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.4);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+}
+
+/* ============================================
+   Card Container
+   ============================================ */
+
+.waw-modal-card {
+  position: relative;
+  display: flex;
+  width: 90%;
+  max-width: 1000px;
+  max-height: 85vh;
+  background: #e8eef4;
+  border-radius: 24px;
+  overflow: hidden;
+  box-shadow: 0 25px 80px rgba(0, 0, 0, 0.3);
+  animation: cardSlideIn 0.3s ease;
+}
+
+@keyframes cardSlideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* ============================================
+   Close Button
+   ============================================ */
+
+.waw-close-btn {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.1);
+  border: none;
+  color: #4a5568;
+  font-size: 24px;
+  font-weight: 300;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  z-index: 10;
+  line-height: 1;
+}
+
+.waw-close-btn:hover {
+  background: rgba(0, 0, 0, 0.15);
+  color: #1a1a2e;
+  transform: scale(1.1);
+}
+
+/* ============================================
+   Main Content Area
+   ============================================ */
+
+.waw-modal-main {
+  flex: 1;
+  padding: 40px 48px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Header */
+.waw-modal-header {
+  margin-bottom: 32px;
+  flex-shrink: 0;
+}
+
+.waw-job-title {
+  font-size: 36px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 0 0 12px 0;
+  line-height: 1.2;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.waw-company-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 18px;
+  color: #4a5568;
+}
+
+.waw-company-at {
+  color: #718096;
+  font-weight: 400;
+}
+
+.waw-company-name {
+  font-weight: 500;
+  color: #2d3748;
+}
+
+.waw-company-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  object-fit: contain;
+  background: white;
+  padding: 4px;
+  margin-left: 8px;
+}
+
+/* ============================================
+   Body Content
+   ============================================ */
+
+.waw-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding-right: 8px;
+  margin-right: -8px;
+}
+
+.waw-section {
+  margin-bottom: 28px;
+}
+
+.waw-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin: 0 0 12px 0;
+}
+
+.waw-section-content {
+  font-size: 14px;
+  color: #4a5568;
+  line-height: 1.8;
+}
+
+.waw-content-item {
+  margin-bottom: 8px;
+  padding-left: 4px;
+}
+
+/* Scrollbar */
+.waw-modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.waw-modal-body::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.waw-modal-body::-webkit-scrollbar-thumb {
+  background: #c5cfd9;
+  border-radius: 3px;
+}
+
+.waw-modal-body::-webkit-scrollbar-thumb:hover {
+  background: #a0aec0;
+}
+
+/* ============================================
+   Footer / Actions
+   ============================================ */
+
+.waw-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 28px;
+  padding-top: 24px;
+  flex-shrink: 0;
+}
+
+/* Apply Button */
+.waw-apply-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 48px;
+  background: #d4dce4;
+  border: none;
+  border-radius: 30px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2d3748;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.waw-apply-btn:hover {
+  background: #c5cfd9;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.waw-apply-icon {
+  font-size: 16px;
+}
+
+/* Navigation Pills */
+.waw-nav-pills {
+  display: flex;
+  background: #d4dce4;
+  border-radius: 30px;
+  overflow: hidden;
+}
+
+.waw-nav-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 52px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  color: #4a5568;
+  transition: all 0.2s ease;
+}
+
+.waw-nav-pill:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: #1a1a2e;
+}
+
+.waw-nav-pill:active {
+  transform: scale(0.95);
+}
+
+.waw-nav-prev {
+  border-right: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+/* ============================================
+   Sidebar
+   ============================================ */
+
+.waw-modal-sidebar {
+  width: 300px;
+  padding: 40px 32px;
+  background: #f5f7fa;
+  flex-shrink: 0;
+}
+
+.waw-info-item {
+  margin-bottom: 20px;
+}
+
+.waw-info-item:last-child {
+  margin-bottom: 0;
+}
+
+.waw-info-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: #1a1a2e;
+  margin-bottom: 6px;
+}
+
+.waw-info-value {
+  display: block;
+  font-size: 14px;
+  color: #4a5568;
+  line-height: 1.5;
+}
+
+/* ============================================
+   Responsive
+   ============================================ */
+
+@media (max-width: 900px) {
+  .waw-modal-card {
+    flex-direction: column;
+    max-height: 90vh;
+  }
+  
+  .waw-modal-sidebar {
+    width: 100%;
+    padding: 24px 32px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  
+  .waw-modal-sidebar .waw-info-item {
+    margin-bottom: 0;
+  }
+  
+  .waw-modal-main {
+    padding: 32px;
+  }
+  
+  .waw-job-title {
+    font-size: 28px;
+  }
+  
+  .waw-modal-footer {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  
+  .waw-apply-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 600px) {
+  .waw-modal-card {
+    width: 95%;
+    border-radius: 20px;
+  }
+  
+  .waw-modal-main {
+    padding: 24px;
+  }
+  
+  .waw-modal-sidebar {
+    grid-template-columns: 1fr;
+    padding: 20px 24px;
+  }
+  
+  .waw-job-title {
+    font-size: 24px;
+  }
+  
+  .waw-company-row {
+    font-size: 16px;
+  }
+}
+
+/* ============================================
+   Dark Mode
+   ============================================ */
+
+.azure-dark .waw-modal-card,
+.waw-dark .waw-modal-card {
+  background: #1e1e2e;
+}
+
+.azure-dark .waw-overlay-backdrop,
+.waw-dark .waw-overlay-backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.azure-dark .waw-close-btn,
+.waw-dark .waw-close-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #a6adc8;
+}
+
+.azure-dark .waw-close-btn:hover,
+.waw-dark .waw-close-btn:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #cdd6f4;
+}
+
+.azure-dark .waw-modal-main,
+.waw-dark .waw-modal-main {
+  background: #1e1e2e;
+}
+
+.azure-dark .waw-job-title,
+.waw-dark .waw-job-title {
+  color: #cdd6f4;
+}
+
+.azure-dark .waw-company-row,
+.waw-dark .waw-company-row {
+  color: #a6adc8;
+}
+
+.azure-dark .waw-company-at,
+.waw-dark .waw-company-at {
+  color: #6c7086;
+}
+
+.azure-dark .waw-company-name,
+.waw-dark .waw-company-name {
+  color: #bac2de;
+}
+
+.azure-dark .waw-section-title,
+.waw-dark .waw-section-title {
+  color: #cdd6f4;
+}
+
+.azure-dark .waw-section-content,
+.waw-dark .waw-section-content {
+  color: #a6adc8;
+}
+
+.azure-dark .waw-modal-body::-webkit-scrollbar-thumb,
+.waw-dark .waw-modal-body::-webkit-scrollbar-thumb {
+  background: #45475a;
+}
+
+.azure-dark .waw-apply-btn,
+.waw-dark .waw-apply-btn {
+  background: #313244;
+  color: #cdd6f4;
+}
+
+.azure-dark .waw-apply-btn:hover,
+.waw-dark .waw-apply-btn:hover {
+  background: #45475a;
+}
+
+.azure-dark .waw-nav-pills,
+.waw-dark .waw-nav-pills {
+  background: #313244;
+}
+
+.azure-dark .waw-nav-pill,
+.waw-dark .waw-nav-pill {
+  color: #a6adc8;
+}
+
+.azure-dark .waw-nav-pill:hover,
+.waw-dark .waw-nav-pill:hover {
+  background: #45475a;
+  color: #cdd6f4;
+}
+
+.azure-dark .waw-nav-prev,
+.waw-dark .waw-nav-prev {
+  border-right-color: rgba(255, 255, 255, 0.1);
+}
+
+.azure-dark .waw-modal-sidebar,
+.waw-dark .waw-modal-sidebar {
+  background: #181825;
+}
+
+.azure-dark .waw-info-label,
+.waw-dark .waw-info-label {
+  color: #cdd6f4;
+}
+
+.azure-dark .waw-info-value,
+.waw-dark .waw-info-value {
+  color: #a6adc8;
+}

@@ -1,0 +1,100 @@
+/**
+ * Azure Light Theme
+ * Default light theme for WaterlooWorks Azure
+ */
+
+[data-azure-theme="azure-light"] {
+  --azure-primary: #45b6f7;
+  --azure-primary-hover: #2da8f0;
+  --azure-primary-active: #1a9ae8;
+  
+  --azure-bg-primary: #ffffff;
+  --azure-bg-secondary: #f8f9fa;
+  --azure-bg-tertiary: #e9ecef;
+  --azure-bg-hover: #f1f3f5;
+  
+  --azure-text-primary: #212529;
+  --azure-text-secondary: #6c757d;
+  
+  --azure-accent: #45b6f7;
+  --azure-accent-light: rgba(69, 182, 247, 0.1);
+}
+
+/* Header styling */
+[data-azure-theme="azure-light"] header,
+[data-azure-theme="azure-light"] .header__container {
+  background: linear-gradient(135deg, var(--azure-primary) 0%, #2da8f0 100%);
+  color: var(--azure-text-inverse);
+}
+
+/* Navigation */
+[data-azure-theme="azure-light"] .nav,
+[data-azure-theme="azure-light"] .navbar {
+  background-color: var(--azure-bg-primary);
+  border-bottom: 1px solid var(--azure-border-light);
+}
+
+/* Cards and panels */
+[data-azure-theme="azure-light"] .panel,
+[data-azure-theme="azure-light"] .box,
+[data-azure-theme="azure-light"] .card {
+  background-color: var(--azure-bg-primary);
+  border: 1px solid var(--azure-border-light);
+  border-radius: var(--azure-radius-md);
+  box-shadow: var(--azure-shadow-sm);
+}
+
+/* Tables */
+[data-azure-theme="azure-light"] .table {
+  background-color: var(--azure-bg-primary);
+}
+
+[data-azure-theme="azure-light"] .table thead th {
+  background-color: var(--azure-bg-secondary);
+  border-bottom: 2px solid var(--azure-border-medium);
+}
+
+[data-azure-theme="azure-light"] .table tbody tr:hover {
+  background-color: var(--azure-bg-hover);
+}
+
+/* Buttons */
+[data-azure-theme="azure-light"] .btn-primary,
+[data-azure-theme="azure-light"] .btn-info {
+  background-color: var(--azure-primary);
+  border-color: var(--azure-primary);
+  color: var(--azure-text-inverse);
+}
+
+[data-azure-theme="azure-light"] .btn-primary:hover,
+[data-azure-theme="azure-light"] .btn-info:hover {
+  background-color: var(--azure-primary-hover);
+  border-color: var(--azure-primary-hover);
+}
+
+/* Links */
+[data-azure-theme="azure-light"] a {
+  color: var(--azure-primary);
+}
+
+[data-azure-theme="azure-light"] a:hover {
+  color: var(--azure-primary-hover);
+}
+
+/* Form elements */
+[data-azure-theme="azure-light"] input,
+[data-azure-theme="azure-light"] select,
+[data-azure-theme="azure-light"] textarea {
+  background-color: var(--azure-bg-primary);
+  border: 1px solid var(--azure-border-medium);
+  border-radius: var(--azure-radius-sm);
+  color: var(--azure-text-primary);
+}
+
+[data-azure-theme="azure-light"] input:focus,
+[data-azure-theme="azure-light"] select:focus,
+[data-azure-theme="azure-light"] textarea:focus {
+  border-color: var(--azure-primary);
+  box-shadow: 0 0 0 3px var(--azure-accent-light);
+  outline: none;
+}

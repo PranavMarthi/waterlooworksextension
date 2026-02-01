@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WaterlooActuallyWorks</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <header class="popup-header">
+      <img src="../icons/icon32.png" alt="WAW" class="logo">
+      <div class="header-text">
+        <h1>WaterlooActuallyWorks</h1>
+        <span class="version">v5.0.0</span>
+      </div>
+    </header>
+
+    <main class="popup-main">
+      <!-- Quick toggle -->
+      <div class="quick-toggle">
+        <span>Extension Enabled</span>
+        <label class="toggle">
+          <input type="checkbox" id="quick-enable" checked>
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+
+      <!-- Quick actions -->
+      <div class="quick-actions">
+        <a href="https://waterlooworks.uwaterloo.ca/myAccount/dashboard.htm" target="_blank" class="action-btn">
+          <span class="action-icon">📊</span>
+          <span>Dashboard</span>
+        </a>
+        <a href="https://waterlooworks.uwaterloo.ca/myAccount/co-op/coop-postings.htm" target="_blank" class="action-btn">
+          <span class="action-icon">💼</span>
+          <span>Postings</span>
+        </a>
+        <a href="https://waterlooworks.uwaterloo.ca/myAccount/co-op/coopApplications.htm" target="_blank" class="action-btn">
+          <span class="action-icon">📝</span>
+          <span>Applications</span>
+        </a>
+        <a href="https://waterlooworks.uwaterloo.ca/myAccount/messages.htm" target="_blank" class="action-btn">
+          <span class="action-icon">✉️</span>
+          <span>Messages</span>
+        </a>
+      </div>
+
+      <!-- Theme toggle -->
+      <div class="theme-section">
+        <span>Dark Mode</span>
+        <label class="toggle">
+          <input type="checkbox" id="dark-mode-toggle">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </main>
+
+    <footer class="popup-footer">
+      <button id="open-options" class="options-btn">
+        <span>⚙️</span>
+        <span>Options</span>
+      </button>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

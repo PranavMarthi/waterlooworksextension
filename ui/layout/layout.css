@@ -1,0 +1,197 @@
+/**
+ * Layout Enhancements for WaterlooWorks Azure
+ * General layout improvements
+ */
+
+/* Base layout improvements */
+body.azure-enhanced {
+  min-height: 100vh;
+}
+
+/* Improved typography */
+body.azure-enhanced {
+  font-size: var(--azure-font-size-md);
+  line-height: 1.6;
+}
+
+body.azure-enhanced h1,
+body.azure-enhanced h2,
+body.azure-enhanced h3,
+body.azure-enhanced h4,
+body.azure-enhanced h5,
+body.azure-enhanced h6 {
+  font-weight: 600;
+  line-height: 1.3;
+  margin-bottom: var(--azure-spacing-md);
+}
+
+/* Container improvements */
+body.azure-enhanced #mainContentDiv {
+  padding: var(--azure-spacing-lg);
+  max-width: 100%;
+}
+
+/* Card/Panel improvements */
+body.azure-enhanced .panel,
+body.azure-enhanced .box {
+  margin-bottom: var(--azure-spacing-lg);
+  border-radius: var(--azure-radius-md);
+  overflow: hidden;
+}
+
+body.azure-enhanced .panel-heading,
+body.azure-enhanced .box-header {
+  padding: var(--azure-spacing-md) var(--azure-spacing-lg);
+  background-color: var(--azure-bg-secondary);
+  border-bottom: 1px solid var(--azure-border-light);
+  font-weight: 600;
+}
+
+body.azure-enhanced .panel-body,
+body.azure-enhanced .boxContent {
+  padding: var(--azure-spacing-lg);
+}
+
+/* Button improvements */
+body.azure-enhanced .btn {
+  border-radius: var(--azure-radius-sm);
+  padding: var(--azure-spacing-sm) var(--azure-spacing-md);
+  font-weight: 500;
+  transition: all var(--azure-transition-fast);
+}
+
+body.azure-enhanced .btn:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--azure-accent-light);
+}
+
+/* Form improvements */
+body.azure-enhanced input[type="text"],
+body.azure-enhanced input[type="email"],
+body.azure-enhanced input[type="password"],
+body.azure-enhanced input[type="search"],
+body.azure-enhanced select,
+body.azure-enhanced textarea {
+  padding: var(--azure-spacing-sm) var(--azure-spacing-md);
+  border-radius: var(--azure-radius-sm);
+  transition: border-color var(--azure-transition-fast), box-shadow var(--azure-transition-fast);
+}
+
+/* Navigation improvements */
+body.azure-enhanced .nav > li > a,
+body.azure-enhanced .navbar-nav > li > a {
+  padding: var(--azure-spacing-md) var(--azure-spacing-lg);
+  transition: background-color var(--azure-transition-fast);
+}
+
+body.azure-enhanced .nav > li > a:hover,
+body.azure-enhanced .navbar-nav > li > a:hover {
+  background-color: var(--azure-bg-hover);
+}
+
+/* Breadcrumb improvements */
+body.azure-enhanced .breadcrumb {
+  padding: var(--azure-spacing-md);
+  background-color: var(--azure-bg-secondary);
+  border-radius: var(--azure-radius-sm);
+  margin-bottom: var(--azure-spacing-lg);
+}
+
+/* Alert improvements */
+body.azure-enhanced .alert {
+  border-radius: var(--azure-radius-md);
+  padding: var(--azure-spacing-md) var(--azure-spacing-lg);
+  border-width: 0;
+  border-left-width: 4px;
+}
+
+/* Modal improvements */
+body.azure-enhanced .modal-content {
+  border-radius: var(--azure-radius-lg);
+  border: none;
+  box-shadow: var(--azure-shadow-lg);
+}
+
+body.azure-enhanced .modal-header {
+  padding: var(--azure-spacing-lg);
+  border-bottom: 1px solid var(--azure-border-light);
+}
+
+body.azure-enhanced .modal-body {
+  padding: var(--azure-spacing-lg);
+}
+
+body.azure-enhanced .modal-footer {
+  padding: var(--azure-spacing-lg);
+  border-top: 1px solid var(--azure-border-light);
+}
+
+/* Dropdown improvements */
+body.azure-enhanced .dropdown-menu {
+  border-radius: var(--azure-radius-md);
+  box-shadow: var(--azure-shadow-md);
+  border: 1px solid var(--azure-border-light);
+  padding: var(--azure-spacing-sm) 0;
+}
+
+body.azure-enhanced .dropdown-menu > li > a {
+  padding: var(--azure-spacing-sm) var(--azure-spacing-lg);
+  transition: background-color var(--azure-transition-fast);
+}
+
+body.azure-enhanced .dropdown-menu > li > a:hover {
+  background-color: var(--azure-bg-hover);
+}
+
+/* Pagination improvements */
+body.azure-enhanced .pagination > li > a,
+body.azure-enhanced .pagination > li > span,
+body.azure-enhanced .pager > li > a {
+  padding: var(--azure-spacing-sm) var(--azure-spacing-md);
+  border-radius: var(--azure-radius-sm);
+  margin: 0 2px;
+  transition: all var(--azure-transition-fast);
+}
+
+body.azure-enhanced .pagination > .active > a,
+body.azure-enhanced .pagination > .active > span {
+  background-color: var(--azure-primary);
+  border-color: var(--azure-primary);
+}
+
+/* Back to top button */
+.azure-back-to-top {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background-color: var(--azure-primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: var(--azure-shadow-md);
+  opacity: 0;
+  visibility: hidden;
+  transition: all var(--azure-transition-normal);
+  z-index: var(--azure-z-fixed);
+}
+
+.azure-back-to-top:hover {
+  background-color: var(--azure-primary-hover);
+  transform: translateY(-2px);
+}
+
+.azure-back-to-top.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+.azure-back-to-top::before {
+  content: '↑';
+  font-size: 20px;
+  font-weight: bold;
+}

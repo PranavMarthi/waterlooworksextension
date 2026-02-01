@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WaterlooActuallyWorks - Options</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="options-container">
+    <header class="options-header">
+      <div class="logo">
+        <img src="../icons/icon48.png" alt="WAW Logo">
+        <div class="logo-text">
+          <h1>WaterlooActuallyWorks</h1>
+          <span class="version">v5.0.0</span>
+        </div>
+      </div>
+    </header>
+
+    <main class="options-main">
+      <!-- Welcome message for first run -->
+      <section id="welcome-section" class="section welcome-section hidden">
+        <h2>Welcome to WaterlooWorks Azure!</h2>
+        <p>Thank you for installing the Community Edition. This extension enhances your WaterlooWorks experience with themes, layout improvements, and productivity features.</p>
+        <p><strong>Note:</strong> This extension is not affiliated with the University of Waterloo.</p>
+        <button id="dismiss-welcome" class="btn btn-primary">Get Started</button>
+      </section>
+
+      <!-- Global Settings -->
+      <section class="section">
+        <h2>General</h2>
+        <div class="setting-group">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="features-enabled">Enable Extension</label>
+              <p class="setting-description">Master toggle for all extension features</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="features-enabled" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Theme Settings -->
+      <section class="section">
+        <h2>Appearance</h2>
+        <div class="setting-group">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="theme-select">Theme</label>
+              <p class="setting-description">Choose your preferred color theme</p>
+            </div>
+            <select id="theme-select" class="select">
+              <option value="azure-light">Azure Light</option>
+              <option value="azure-dark">Azure Dark</option>
+            </select>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="dark-mode">Dark Mode</label>
+              <p class="setting-description">Enable dark mode for reduced eye strain</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="dark-mode">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="auto-dark-mode">Auto Dark Mode</label>
+              <p class="setting-description">Automatically switch to dark mode based on time</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="auto-dark-mode">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-item sub-setting" id="dark-mode-schedule">
+            <div class="setting-info">
+              <label>Schedule</label>
+              <p class="setting-description">Dark mode active time range</p>
+            </div>
+            <div class="time-inputs">
+              <input type="time" id="dark-mode-start" value="22:00">
+              <span>to</span>
+              <input type="time" id="dark-mode-end" value="07:00">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Layout Settings -->
+      <section class="section">
+        <h2>Layout</h2>
+        <div class="setting-group">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="layout-compact">Compact Mode</label>
+              <p class="setting-description">Reduce spacing for more content density</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="layout-compact">
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="sticky-nav">Sticky Navigation</label>
+              <p class="setting-description">Keep navigation visible while scrolling</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="sticky-nav" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Job Postings Settings -->
+      <section class="section">
+        <h2>Job Postings</h2>
+        <div class="setting-group">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="highlight-new">Highlight New Postings</label>
+              <p class="setting-description">Visually highlight newly posted jobs</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="highlight-new" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="open-new-tab">Open in New Tab</label>
+              <p class="setting-description">Open job postings in a new browser tab</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="open-new-tab" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="batch-operations">Batch Operations</label>
+              <p class="setting-description">Enable multi-select and batch actions</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="batch-operations" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="new-job-days">Highlight "New" Jobs</label>
+              <p class="setting-description">Jobs posted within this many days are highlighted</p>
+            </div>
+            <input type="number" id="new-job-days" class="number-input" min="1" max="30" value="7">
+          </div>
+        </div>
+      </section>
+
+      <!-- Job Posting Layout (rearranger) -->
+      <section class="section">
+        <h2>Job Posting Layout</h2>
+        <p class="setting-description" style="margin-bottom: 16px;">Reorder and highlight key information on job posting detail pages. Changes apply after you refresh a posting page.</p>
+        <div class="setting-group">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="job-rearranger-enabled">Reorder job information</label>
+              <p class="setting-description">Show key info at the top (duration, location, compensation, deadline, application method) and reorder sections below</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="job-rearranger-enabled" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <div class="setting-item setting-item-block">
+            <div class="setting-info">
+              <label for="job-rearranger-priority-keys">Highlight at top (one key per line)</label>
+              <p class="setting-description">Keys: duration, location, compensation, deadline, method. These appear in the highlighted box at the top.</p>
+            </div>
+            <textarea id="job-rearranger-priority-keys" class="textarea-keys" rows="5" placeholder="duration&#10;location&#10;compensation&#10;deadline&#10;method"></textarea>
+          </div>
+
+          <div class="setting-item setting-item-block">
+            <div class="setting-info">
+              <label for="job-rearranger-standard-order">Then show in this order (one key per line)</label>
+              <p class="setting-description">Keys: job_description, responsibilities, required_skills, targeted_degrees. Other sections follow after.</p>
+            </div>
+            <textarea id="job-rearranger-standard-order" class="textarea-keys" rows="5" placeholder="job_description&#10;responsibilities&#10;required_skills&#10;targeted_degrees"></textarea>
+          </div>
+
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Reset layout order</label>
+              <p class="setting-description">Restore default order for the boxes above</p>
+            </div>
+            <button id="job-rearranger-reset" class="btn btn-secondary">Reset to default</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Messages Settings -->
+      <section class="section">
+        <h2>Messages</h2>
+        <div class="setting-group">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="highlight-unread">Highlight Unread</label>
+              <p class="setting-description">Highlight unread messages in the list</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="highlight-unread" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Keyboard Shortcuts -->
+      <section class="section">
+        <h2>Keyboard Shortcuts</h2>
+        <div class="setting-group">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label for="keyboard-shortcuts">Enable Shortcuts</label>
+              <p class="setting-description">Use keyboard shortcuts for navigation</p>
+            </div>
+            <label class="toggle">
+              <input type="checkbox" id="keyboard-shortcuts" checked>
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Reset -->
+      <section class="section">
+        <h2>Reset</h2>
+        <div class="setting-group">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label>Reset to Defaults</label>
+              <p class="setting-description">Restore all settings to their default values</p>
+            </div>
+            <button id="reset-settings" class="btn btn-danger">Reset</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- About -->
+      <section class="section about-section">
+        <h2>About</h2>
+        <p>WaterlooActuallyWorks is a browser extension that makes WaterlooWorks actually usable with keyboard navigation, shortlisting, key info highlights, and more.</p>
+        <p class="disclaimer"><strong>Disclaimer:</strong> This extension is not affiliated with or endorsed by the University of Waterloo.</p>
+        <div class="about-links">
+          <a href="https://github.com/SssWind/Waterlooworks-Azure" target="_blank">GitHub</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="options-footer">
+      <p>WaterlooActuallyWorks &copy; 2024-2026</p>
+    </footer>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

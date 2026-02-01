@@ -1,0 +1,44 @@
+/* Hide original WaterlooWorks modal - injected at document_start */
+
+/* 
+ * Strategy: Hide the modal visually but keep it in DOM for parsing.
+ * Use clip-path to make it invisible without affecting layout.
+ */
+
+/* Target the WaterlooWorks Vue modal container */
+div[data-v-70e7ded6-s] {
+  clip-path: inset(100%) !important;
+  position: fixed !important;
+  top: -9999px !important;
+  left: -9999px !important;
+  pointer-events: none !important;
+}
+
+/* Also target common modal classes */
+.modal__content.height--100.overflow--hidden,
+.modal__overlay:not(#waw-overlay),
+.modal-backdrop {
+  clip-path: inset(100%) !important;
+  position: fixed !important;
+  top: -9999px !important;
+  left: -9999px !important;
+  pointer-events: none !important;
+}
+
+/* Hide any backdrop/overlay from WaterlooWorks */
+.modal__overlay:not(#waw-overlay) {
+  background: transparent !important;
+  opacity: 0 !important;
+}
+
+/* Ensure our overlay is always on top and visible */
+#waw-overlay {
+  visibility: visible !important;
+  opacity: 1 !important;
+  pointer-events: auto !important;
+  clip-path: none !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  z-index: 99999999 !important;
+}

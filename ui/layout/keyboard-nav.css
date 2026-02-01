@@ -1,0 +1,314 @@
+/**
+ * Keyboard Navigation Styles for WaterlooWorks Azure
+ */
+
+/* Selected row highlight */
+.azure-selected {
+  background-color: rgba(69, 182, 247, 0.2) !important;
+  outline: 2px solid #45b6f7 !important;
+  outline-offset: -2px;
+  position: relative;
+}
+
+.azure-selected td {
+  background-color: transparent !important;
+}
+
+/* Pulsing effect on selected */
+.azure-selected::before {
+  content: '→';
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #45b6f7;
+  font-weight: bold;
+  font-size: 16px;
+  animation: azure-pulse 1s ease-in-out infinite;
+}
+
+@keyframes azure-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Shortlist flash effect */
+.azure-shortlisted-flash {
+  animation: azure-shortlist-flash 0.5s ease-out;
+}
+
+@keyframes azure-shortlist-flash {
+  0% { background-color: rgba(40, 167, 69, 0.4) !important; }
+  100% { background-color: transparent; }
+}
+
+/* Dark mode adjustments */
+.azure-dark .azure-selected {
+  background-color: rgba(69, 182, 247, 0.25) !important;
+}
+
+/* Toast notifications */
+.azure-toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  background-color: #333;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 99999;
+  opacity: 0;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.azure-toast-visible {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+/* Help overlay */
+.azure-help {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  background-color: #1a1d21;
+  color: #f8f9fa;
+  padding: 16px 20px;
+  border-radius: 12px;
+  font-size: 13px;
+  z-index: 99999;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.3s ease;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  max-width: 320px;
+}
+
+.azure-help-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.azure-help-toast strong {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 14px;
+  color: #45b6f7;
+}
+
+.azure-help-toast small {
+  display: block;
+  margin-top: 8px;
+  color: #6c757d;
+  font-style: italic;
+}
+
+.azure-help-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+}
+
+.azure-help-grid span:nth-child(odd) {
+  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.azure-help-grid span:nth-child(even) {
+  color: #adb5bd;
+}
+
+/* ================================================
+   Navigation UI for Posting Detail Pages
+   ================================================ */
+
+.azure-nav-ui {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  background-color: #1a1d21;
+  padding: 12px 16px;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  z-index: 99998;
+}
+
+.azure-nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 16px;
+  background-color: #2d3238;
+  border: none;
+  border-radius: 8px;
+  color: #f8f9fa;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 70px;
+}
+
+.azure-nav-btn:hover {
+  background-color: #45b6f7;
+  transform: translateY(-2px);
+}
+
+.azure-nav-btn:active {
+  transform: translateY(0);
+}
+
+.azure-nav-arrow {
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.azure-nav-icon {
+  font-size: 18px;
+}
+
+.azure-nav-label {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.azure-nav-shortcut {
+  font-size: 10px;
+  color: #6c757d;
+  font-family: 'SF Mono', Monaco, 'Courier New', monospace;
+  background-color: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.azure-nav-btn:hover .azure-nav-shortcut {
+  background-color: rgba(0, 0, 0, 0.2);
+  color: #fff;
+}
+
+.azure-nav-shortlist {
+  background-color: #2d5a2d;
+}
+
+.azure-nav-shortlist:hover {
+  background-color: #28a745;
+}
+
+.azure-nav-back {
+  background-color: #5a2d2d;
+}
+
+.azure-nav-back:hover {
+  background-color: #dc3545;
+}
+
+/* ================================================
+   Priority Info Box for Job Details
+   ================================================ */
+
+.azure-priority-box {
+  background: linear-gradient(135deg, #1a5276 0%, #2471a3 100%);
+  border-radius: 12px;
+  padding: 0;
+  margin: 0 0 24px 0;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.azure-priority-header {
+  background: rgba(0, 0, 0, 0.2);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 600;
+  padding: 12px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.azure-priority-content {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1px;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.azure-priority-item {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.azure-priority-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.azure-priority-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.azure-priority-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  line-height: 1.4;
+}
+
+/* Specific field colors */
+.azure-priority-duration .azure-priority-value {
+  color: #82e0aa;
+}
+
+.azure-priority-location .azure-priority-value {
+  color: #85c1e9;
+  font-size: 16px;
+}
+
+.azure-priority-compensation .azure-priority-value {
+  color: #58d68d;
+  font-size: 16px;
+}
+
+.azure-priority-deadline .azure-priority-value {
+  color: #f1948a;
+}
+
+.azure-priority-method .azure-priority-value {
+  color: #f8c471;
+}
+
+/* Dimmed fields in original content */
+.azure-dimmed-field {
+  opacity: 0.4;
+}
+
+/* Highlighted important sections */
+.azure-important-section {
+  color: #2471a3 !important;
+  font-size: 1.1em;
+}
+
+/* Section separator */
+.azure-section-separator {
+  border: none;
+  border-top: 2px solid #2471a3;
+  margin: 24px 0;
+}
+
+/* Hide original priority elements if needed */
+.azure-hidden-original {
+  display: none !important;
+}

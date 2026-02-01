@@ -1,0 +1,125 @@
+/**
+ * Messages Page Enhancements for WaterlooWorks Azure
+ */
+
+/* Message list improvements */
+body.azure-page-messages .table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+body.azure-page-messages .table thead th {
+  background-color: var(--azure-bg-secondary);
+  font-weight: 600;
+  padding: var(--azure-spacing-md);
+  border-bottom: 2px solid var(--azure-border-medium);
+}
+
+body.azure-page-messages .table tbody tr {
+  transition: background-color var(--azure-transition-fast);
+  cursor: pointer;
+}
+
+body.azure-page-messages .table tbody tr:hover {
+  background-color: var(--azure-bg-hover);
+}
+
+body.azure-page-messages .table tbody td {
+  padding: var(--azure-spacing-md);
+  border-bottom: 1px solid var(--azure-border-light);
+  vertical-align: middle;
+}
+
+/* Unread message styling */
+.azure-unread-message {
+  background-color: rgba(69, 182, 247, 0.05) !important;
+}
+
+.azure-unread-message td {
+  font-weight: 600;
+}
+
+.azure-unread-message::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background-color: var(--azure-primary);
+}
+
+/* Unread indicator dot */
+.azure-unread-indicator {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background-color: var(--azure-primary);
+  border-radius: 50%;
+  margin-right: var(--azure-spacing-sm);
+}
+
+/* Message subject */
+body.azure-page-messages .message-subject,
+body.azure-page-messages td:nth-child(2) {
+  max-width: 400px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Message date */
+body.azure-page-messages .message-date,
+body.azure-page-messages td:last-child {
+  color: var(--azure-text-secondary);
+  font-size: var(--azure-font-size-sm);
+  white-space: nowrap;
+}
+
+/* Message view styling */
+body.azure-page-messages .messageView {
+  background-color: var(--azure-bg-primary);
+  border-radius: var(--azure-radius-md);
+  padding: var(--azure-spacing-lg);
+}
+
+body.azure-page-messages .messageView .message-header {
+  border-bottom: 1px solid var(--azure-border-light);
+  padding-bottom: var(--azure-spacing-md);
+  margin-bottom: var(--azure-spacing-lg);
+}
+
+body.azure-page-messages .messageView .message-header h3 {
+  margin: 0 0 var(--azure-spacing-sm) 0;
+  font-size: var(--azure-font-size-lg);
+}
+
+body.azure-page-messages .messageView .message-meta {
+  color: var(--azure-text-secondary);
+  font-size: var(--azure-font-size-sm);
+}
+
+body.azure-page-messages .messageView .message-body {
+  line-height: 1.7;
+}
+
+/* Category badges */
+body.azure-page-messages .message-category {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: var(--azure-radius-full);
+  font-size: var(--azure-font-size-xs);
+  font-weight: 500;
+  background-color: var(--azure-bg-tertiary);
+  color: var(--azure-text-secondary);
+}
+
+body.azure-page-messages .message-category.important {
+  background-color: rgba(220, 53, 69, 0.1);
+  color: var(--azure-danger);
+}
+
+body.azure-page-messages .message-category.interview {
+  background-color: rgba(40, 167, 69, 0.1);
+  color: var(--azure-success);
+}

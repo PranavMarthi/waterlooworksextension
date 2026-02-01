@@ -1,0 +1,200 @@
+/**
+ * Base CSS for WaterlooActuallyWorks
+ * CSS variables and foundational styles
+ */
+
+:root {
+  /* Color palette - Light mode defaults */
+  --waw-primary: #667eea;
+  --waw-primary-hover: #5a67d8;
+  --waw-primary-active: #4c51bf;
+  --waw-accent: #764ba2;
+  
+  --waw-secondary: #6c757d;
+  --waw-success: #27ae60;
+  --waw-warning: #f39c12;
+  --waw-danger: #e74c3c;
+  --waw-info: #3498db;
+  
+  /* Background colors */
+  --waw-bg-primary: #ffffff;
+  --waw-bg-secondary: #f8f9fa;
+  --waw-bg-tertiary: #e9ecef;
+  --waw-bg-hover: #f1f3f5;
+  
+  /* Text colors */
+  --waw-text-primary: #212529;
+  --waw-text-secondary: #6c757d;
+  --waw-text-muted: #adb5bd;
+  --waw-text-inverse: #ffffff;
+  
+  /* Border colors */
+  --waw-border-light: #dee2e6;
+  --waw-border-medium: #ced4da;
+  --waw-border-dark: #adb5bd;
+  
+  /* Shadow */
+  --waw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --waw-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --waw-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.1);
+  
+  /* Spacing */
+  --waw-spacing-xs: 0.25rem;
+  --waw-spacing-sm: 0.5rem;
+  --waw-spacing-md: 1rem;
+  --waw-spacing-lg: 1.5rem;
+  --waw-spacing-xl: 2rem;
+  
+  /* Border radius */
+  --waw-radius-sm: 4px;
+  --waw-radius-md: 8px;
+  --waw-radius-lg: 12px;
+  --waw-radius-full: 9999px;
+  
+  /* Typography - Consolidated font stack */
+  --waw-font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --waw-font-size-xs: 0.75rem;
+  --waw-font-size-sm: 0.875rem;
+  --waw-font-size-md: 1rem;
+  --waw-font-size-lg: 1.125rem;
+  --waw-font-size-xl: 1.25rem;
+  
+  /* Transitions */
+  --waw-transition-fast: 150ms ease;
+  --waw-transition-normal: 250ms ease;
+  --waw-transition-slow: 350ms ease;
+  
+  /* Z-index layers */
+  --waw-z-dropdown: 1000;
+  --waw-z-sticky: 1020;
+  --waw-z-fixed: 1030;
+  --waw-z-modal-backdrop: 1040;
+  --waw-z-modal: 1050;
+  --waw-z-tooltip: 1060;
+
+  /* Legacy aliases for backward compatibility */
+  --azure-primary: var(--waw-primary);
+  --azure-bg-primary: var(--waw-bg-primary);
+  --azure-bg-secondary: var(--waw-bg-secondary);
+  --azure-text-primary: var(--waw-text-primary);
+  --azure-font-family: var(--waw-font-family);
+}
+
+/* Dark mode overrides */
+.waw-dark,
+.azure-dark {
+  --waw-bg-primary: #1a1d21;
+  --waw-bg-secondary: #212529;
+  --waw-bg-tertiary: #2d3238;
+  --waw-bg-hover: #343a40;
+  
+  --waw-text-primary: #f8f9fa;
+  --waw-text-secondary: #adb5bd;
+  --waw-text-muted: #6c757d;
+  
+  --waw-border-light: #343a40;
+  --waw-border-medium: #495057;
+  --waw-border-dark: #6c757d;
+  
+  --waw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --waw-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+  --waw-shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
+}
+
+/* ============================================
+   GLOBAL FONT CONSOLIDATION
+   Apply consistent font across the site
+   ============================================ */
+body.waw-enhanced,
+body.azure-enhanced {
+  font-family: var(--waw-font-family) !important;
+}
+
+body.waw-enhanced *,
+body.azure-enhanced * {
+  font-family: inherit;
+}
+
+/* ============================================
+   LOGIN PAGE PROTECTION
+   Don't mess with the login/home page styling
+   ============================================ */
+body.waw-login-page,
+body.azure-page-home {
+  background-color: inherit !important;
+}
+
+body.waw-login-page .waw-enhanced,
+body.waw-login-page .azure-themed,
+body.azure-page-home .waw-enhanced,
+body.azure-page-home .azure-themed {
+  background-color: transparent !important;
+}
+
+/* Hide our enhancements on login page */
+body.waw-login-page #waw-modal-nav,
+body.waw-login-page .waw-row-indicator,
+body.azure-page-home #waw-modal-nav,
+body.azure-page-home .waw-row-indicator {
+  display: none !important;
+}
+
+/* ============================================
+   BASE STYLES
+   ============================================ */
+.waw-themed,
+.azure-themed {
+  font-family: var(--waw-font-family);
+  color: var(--waw-text-primary);
+}
+
+/* Only apply background on non-login pages */
+body.waw-enhanced:not(.waw-login-page):not(.azure-page-home) {
+  background-color: var(--waw-bg-secondary);
+}
+
+/* ============================================
+   NEW JOB HIGHLIGHTS
+   ============================================ */
+.waw-new-job,
+.azure-new-posting {
+  background-color: rgba(39, 174, 96, 0.08) !important;
+  border-left: 3px solid var(--waw-success) !important;
+}
+
+.waw-dark .waw-new-job,
+.azure-dark .azure-new-posting {
+  background-color: rgba(39, 174, 96, 0.12) !important;
+}
+
+/* ============================================
+   SHORTLIST HIGHLIGHTS
+   ============================================ */
+.waw-shortlisted-row {
+  background-color: rgba(243, 156, 18, 0.08) !important;
+  border-left: 3px solid var(--waw-warning) !important;
+}
+
+/* ============================================
+   SELECTED ROW
+   ============================================ */
+.waw-selected,
+.azure-selected {
+  background-color: rgba(102, 126, 234, 0.12) !important;
+  outline: 2px solid var(--waw-primary);
+  outline-offset: -2px;
+}
+
+/* ============================================
+   UNREAD MESSAGES
+   ============================================ */
+.waw-unread-message,
+.azure-unread-message {
+  font-weight: 600;
+  background-color: rgba(102, 126, 234, 0.08) !important;
+}
+
+.waw-dark .waw-unread-message,
+.azure-dark .azure-unread-message {
+  background-color: rgba(102, 126, 234, 0.12) !important;
+}
