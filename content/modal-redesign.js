@@ -160,68 +160,57 @@
   function parseContentSections(modal) {
     const data = { description: '', responsibilities: '', skills: '' };
     
-    // Map label text to our data keys
-    const LABEL_MAP = {
-      'job summary': 'description',
-      'job responsibilities': 'responsibilities',
-      'required skills': 'skills'
-    };
-
-    // Find all labels with the specific class
-    const labels = modal.querySelectorAll('.label.align--middle.display--flex');
-    console.log('[WAW] Found labels:', labels.length);
+    // Get the full text content of the modal
+    const fullText = modal.innerText || modal.textContent || '';
     
-    labels.forEach(labelEl => {
-      const labelText = labelEl.textContent.toLowerCase().trim().replace(/:$/, '');
-      const key = LABEL_MAP[labelText];
-      if (!key) return;
+    // Define the sections we want and the headers that follow them
+    const ALL_HEADERS = [
+      'Work Term:', 'Job Type:', 'Job Title:', 'Number of Job Openings:', 'Level:',
+      'Region:', 'Job - Address Line One:', 'Job - City:', 'Job - Province/State:',
+      'Job - Postal/Zip Code:', 'Job - Country:', 'Employment Location Arrangement:',
+      'Work Term Duration:', 'Special Work Term Start/End Date Considerations:',
+      'Job Summary:', 'Job Responsibilities:', 'Required Skills:',
+      'Transportation and Housing:', 'Compensation and Benefits:',
+      'Targeted Degrees and Disciplines:', 'Application Deadline',
+      'Application Documents Required:', 'Additional Application Information:',
+      'Application Method:', 'Organization:', 'Division:'
+    ];
+    
+    // Extract section content between headers
+    function extractSection(headerName) {
+      const headerIndex = fullText.indexOf(headerName);
+      if (headerIndex === -1) return '';
       
-      // Find the parent container that holds all the content
-      const parent = labelEl.closest('.tag__key-value-list') || labelEl.parentElement?.parentElement;
-      if (!parent) return;
+      const contentStart = headerIndex + headerName.length;
       
-      let content = '';
-      
-      // Get ALL content from the parent - look for <p> which may contain text + lists
-      const pEl = parent.querySelector('p');
-      if (pEl) {
-        // Get the full innerHTML and process it
-        let html = pEl.innerHTML;
-        
-        // Convert <li> tags to bullet points
-        html = html.replace(/<li[^>]*>/gi, '\n• ');
-        html = html.replace(/<\/li>/gi, '');
-        
-        // Convert <br> to newlines
-        html = html.replace(/<br\s*\/?>/gi, '\n');
-        
-        // Remove <ul>, <ol>, and other tags
-        html = html.replace(/<\/?(?:ul|ol)[^>]*>/gi, '');
-        html = html.replace(/<[^>]+>/g, '');
-        
-        // Clean up whitespace
-        content = html.trim();
+      // Find the next header
+      let nextHeaderIndex = fullText.length;
+      for (const h of ALL_HEADERS) {
+        if (h === headerName) continue;
+        const idx = fullText.indexOf(h, contentStart);
+        if (idx !== -1 && idx < nextHeaderIndex) {
+          nextHeaderIndex = idx;
+        }
       }
       
-      // Also check for standalone <ul> or <ol> lists in the parent
-      if (!content || content.length < 50) {
-        const lists = parent.querySelectorAll('ul, ol');
-        lists.forEach(list => {
-          const items = list.querySelectorAll('li');
-          items.forEach(li => {
-            content += '\n• ' + li.textContent.trim();
-          });
-        });
-        content = content.trim();
-      }
+      let content = fullText.substring(contentStart, nextHeaderIndex).trim();
       
-      if (content) {
-        data[key] = content;
-        console.log(`[WAW] Found ${labelText} (${content.length} chars):`, content.substring(0, 100) + '...');
-      }
-    });
-
-    console.log('[WAW] Parsed sections:', Object.keys(data).filter(k => data[k]));
+      // Clean up the content
+      content = content.replace(/\n\s*\n\s*\n/g, '\n\n'); // Remove excessive newlines
+      content = content.replace(/^\s+/gm, ''); // Remove leading whitespace from lines
+      
+      return content;
+    }
+    
+    // Extract our target sections
+    data.description = extractSection('Job Summary:');
+    data.responsibilities = extractSection('Job Responsibilities:');
+    data.skills = extractSection('Required Skills:');
+    
+    console.log('[WAW] Parsed description:', data.description.substring(0, 100) + '...');
+    console.log('[WAW] Parsed responsibilities:', data.responsibilities.substring(0, 100) + '...');
+    console.log('[WAW] Parsed skills:', data.skills.substring(0, 100) + '...');
+    
     return data;
   }
 
@@ -446,8 +435,48 @@
     document.getElementById('waw-prev').onclick = () => nav(-1);
     document.getElementById('waw-next').onclick = () => nav(1);
     document.getElementById('waw-apply').onclick = () => {
-      const btn = document.querySelector('[class*="btn"][class*="apply"], button[onclick*="apply"]');
-      if (btn) btn.click();
+      // Find the apply button in the hidden WaterlooWorks modal
+      const selectors = [
+        'button.btn.btn--primary',                    // Primary action button
+        'button[class*="primary"]',                   // Any primary button
+        'a.btn.btn--primary',                         // Primary link button
+        '.modal__content button.btn--primary',        // Button in modal
+        'div[data-v-70e7ded6-s] button.btn--primary', // Vue modal button
+        'button:contains("Apply")',                   // Button with Apply text
+        '[class*="apply"]',                           // Any element with apply class
+        'a[href*="apply"]',                           // Link with apply in href
+        '.dashboard-header__actions button',          // Actions area button
+        'button.btn:not(.btn--secondary):not(.btn--tertiary)' // Non-secondary buttons
+      ];
+      
+      let btn = null;
+      for (const sel of selectors) {
+        try {
+          btn = document.querySelector(sel);
+          if (btn) {
+            console.log('[WAW] Found apply button with selector:', sel);
+            break;
+          }
+        } catch(e) {}
+      }
+      
+      // Fallback: find button by text content
+      if (!btn) {
+        const allBtns = document.querySelectorAll('button, a.btn');
+        for (const b of allBtns) {
+          if (b.textContent?.toLowerCase().includes('apply')) {
+            btn = b;
+            console.log('[WAW] Found apply button by text content');
+            break;
+          }
+        }
+      }
+      
+      if (btn) {
+        btn.click();
+      } else {
+        console.log('[WAW] Apply button not found');
+      }
     };
 
     document.addEventListener('keydown', keyHandler);
