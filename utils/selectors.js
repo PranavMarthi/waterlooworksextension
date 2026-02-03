@@ -193,9 +193,17 @@ function matchesSelector(element, selectorString) {
 function getCurrentPageType() {
   const url = window.location.href;
   const path = window.location.pathname;
+  const pageText = document.body?.innerText || '';
   
+  // Login/logout pages first (should not be styled)
   if (path.includes('/home.htm') || path === '/') {
     return 'home';
+  }
+  if (path.includes('/login') || path.includes('/sso/')) {
+    return 'login';
+  }
+  if (path.includes('/logout') || pageText.includes('You are now signed out') || pageText.includes('Log in again')) {
+    return 'logout';
   }
   if (path.includes('/dashboard')) {
     return 'dashboard';

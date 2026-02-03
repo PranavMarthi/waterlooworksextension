@@ -12,17 +12,41 @@
 
   // Cache parsed results by job ID
   const cache = new Map();
+  
+  // Track saved jobs (persist in localStorage)
+  let savedJobs = new Set(JSON.parse(localStorage.getItem('waw-saved-jobs') || '[]'));
+  
+  function isJobSaved(jobId) {
+    return jobId && savedJobs.has(jobId);
+  }
+  
+  function markJobAsSaved(jobId) {
+    if (!jobId) return;
+    savedJobs.add(jobId);
+    localStorage.setItem('waw-saved-jobs', JSON.stringify([...savedJobs]));
+    updateSavedBadge(true);
+  }
+  
+  function updateSavedBadge(isSaved) {
+    const badge = document.getElementById('waw-saved-badge');
+    if (badge) {
+      badge.classList.toggle('visible', isSaved);
+    }
+  }
 
   let overlay = null;
   let isActive = false;
+  let currentWWModal = null; // Reference to the current WaterlooWorks modal
+  let currentJobId = null; // Track current job ID for saved status
 
   // ============================================
   // AGGRESSIVE: Hide modal instantly via inline styles
+  // Keep elements in DOM for button triggering
   // ============================================
   
   function hideOriginalModal(el) {
     if (!el || el.id === 'waw-overlay') return;
-    el.style.cssText = 'position:fixed!important;top:-9999px!important;left:-9999px!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;';
+    el.style.cssText = 'position:fixed!important;top:-9999px!important;left:-9999px!important;visibility:hidden!important;opacity:0!important;pointer-events:auto!important;';
   }
 
   // Fast observer to catch and hide modals IMMEDIATELY
@@ -215,6 +239,43 @@
   }
 
   // ============================================
+  // Company URL lookup (Clearbit + Google fallback)
+  // ============================================
+  
+  const companyUrlCache = new Map();
+  
+  async function fetchCompanyUrl(companyName) {
+    if (!companyName) return null;
+    
+    // Check cache first
+    if (companyUrlCache.has(companyName)) {
+      return companyUrlCache.get(companyName);
+    }
+    
+    // Try Clearbit API first
+    try {
+      const response = await fetch(`https://autocomplete.clearbit.com/v1/companies/suggest?query=${encodeURIComponent(companyName)}`);
+      if (response.ok) {
+        const results = await response.json();
+        if (results && results.length > 0 && results[0].domain) {
+          const url = `https://${results[0].domain}`;
+          companyUrlCache.set(companyName, { url, isSearch: false });
+          console.log('[WAW] Found company URL via Clearbit:', url);
+          return { url, isSearch: false };
+        }
+      }
+    } catch (e) {
+      console.log('[WAW] Clearbit API error:', e);
+    }
+    
+    // Fallback: Google search link
+    const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(companyName + ' company')}`;
+    companyUrlCache.set(companyName, { url: googleUrl, isSearch: true });
+    console.log('[WAW] Using Google search fallback for:', companyName);
+    return { url: googleUrl, isSearch: true };
+  }
+
+  // ============================================
   // Parse basic job data (header/sidebar)
   // ============================================
 
@@ -334,8 +395,13 @@
           overflow: hidden; position: relative;
         }
         #waw-main { flex: 1; padding: 36px 42px; display: flex; flex-direction: column; overflow: hidden; }
-        #waw-title { font-size: 32px; font-weight: 700; color: #1a1a2e; margin: 0 0 8px; }
+        #waw-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+        #waw-title { font-size: 32px; font-weight: 700; color: #1a1a2e; margin: 0; flex: 1; }
+        #waw-saved-badge { display: none; padding: 6px 12px; background: #48bb78; color: white; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+        #waw-saved-badge.visible { display: inline-block; }
         #waw-company { font-size: 17px; color: #4a5568; margin-bottom: 28px; }
+        #waw-company a { color: #4a5568; text-decoration: underline; }
+        #waw-company a:hover { color: #2d3748; }
         #waw-body { flex: 1; overflow-y: auto; padding-right: 12px; }
         #waw-body::-webkit-scrollbar { width: 5px; }
         #waw-body::-webkit-scrollbar-thumb { background: #bfc8d0; border-radius: 3px; }
@@ -343,8 +409,11 @@
         .waw-section-title { font-size: 14px; font-weight: 700; color: #1a1a2e; margin-bottom: 10px; }
         .waw-section-content { font-size: 14px; color: #4a5568; line-height: 1.75; }
         #waw-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 20px; }
-        #waw-apply { padding: 14px 44px; background: #d3dce5; border: none; border-radius: 26px; font-size: 15px; font-weight: 600; color: #2d3748; cursor: pointer; display: flex; align-items: center; gap: 8px; }
-        #waw-apply:hover { background: #c6d0da; }
+        #waw-actions { display: flex; gap: 8px; }
+        .waw-action-btn { padding: 12px 20px; background: #d3dce5; border: none; border-radius: 20px; font-size: 14px; font-weight: 600; color: #2d3748; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+        .waw-action-btn:hover { background: #c6d0da; }
+        #waw-apply { background: #4a5568; color: #fff; }
+        #waw-apply:hover { background: #2d3748; }
         #waw-nav { display: flex; background: #d3dce5; border-radius: 26px; overflow: hidden; }
         .waw-nav-btn { width: 60px; height: 46px; border: none; background: transparent; font-size: 18px; color: #4a5568; cursor: pointer; }
         .waw-nav-btn:hover { background: rgba(0,0,0,0.06); }
@@ -360,8 +429,11 @@
       <div id="waw-card">
         <button id="waw-close">×</button>
         <div id="waw-main">
-          <h1 id="waw-title">${esc(data.title) || 'Position'}</h1>
-          <div id="waw-company">@ ${esc(data.company) || 'Company'}</div>
+          <div id="waw-header">
+            <h1 id="waw-title">${esc(data.title) || 'Position'}</h1>
+            <span id="waw-saved-badge">★ Saved</span>
+          </div>
+          <div id="waw-company" data-company="${esc(data.company)}">@ <span id="waw-company-name">${esc(data.company) || 'Company'}</span></div>
           <div id="waw-body">
             ${data.isLoading ? '<div style="color:#718096; display:flex; align-items:center; justify-content:center; height:200px; font-size:16px;">Loading...</div>' : `
               ${data.description ? `<div class="waw-section"><div class="waw-section-title">Description:</div><div class="waw-section-content">${fmt(data.description)}</div></div>` : ''}
@@ -371,7 +443,11 @@
             `}
           </div>
           <div id="waw-footer">
-            <button id="waw-apply"><span>↑</span> Apply</button>
+            <div id="waw-actions">
+              <button class="waw-action-btn" id="waw-save" title="Save to My Jobs Folder">📁</button>
+              <button class="waw-action-btn" id="waw-apply" title="Apply">✓ Apply</button>
+              <button class="waw-action-btn" id="waw-print" title="Print">🖨️</button>
+            </div>
             <div id="waw-nav">
               <button class="waw-nav-btn" id="waw-prev">◀</button>
               <button class="waw-nav-btn" id="waw-next">▶</button>
@@ -390,6 +466,23 @@
     document.body.appendChild(overlay);
     document.body.classList.add('waw-active');
     isActive = true;
+    
+    // Store current job ID and check saved status
+    currentJobId = data.jobId;
+    if (currentJobId && !data.isLoading) {
+      updateSavedBadge(isJobSaved(currentJobId));
+    }
+
+    // Fetch company URL and update the link
+    if (data.company && !data.isLoading) {
+      fetchCompanyUrl(data.company).then(result => {
+        const companyNameEl = document.getElementById('waw-company-name');
+        if (result && companyNameEl) {
+          const title = result.isSearch ? 'Search for company' : 'Visit company website';
+          companyNameEl.innerHTML = `<a href="${result.url}" target="_blank" title="${title}">${esc(data.company)}</a>`;
+        }
+      });
+    }
 
     const closeAll = () => {
       console.log('[WAW] closeAll() called');
@@ -491,55 +584,121 @@
       if (e.key === 'Escape') { e.preventDefault(); closeAll(); }
       else if (e.key === 'ArrowLeft') { e.preventDefault(); nav(-1); }
       else if (e.key === 'ArrowRight') { e.preventDefault(); nav(1); }
+      else if (e.key === 'ArrowUp') { 
+        e.preventDefault(); 
+        // Trigger save to My Jobs Folder
+        document.getElementById('waw-save')?.click();
+      }
     };
 
     document.getElementById('waw-close').onclick = closeAll;
     overlay.onclick = (e) => { if (e.target === overlay) closeAll(); };
     document.getElementById('waw-prev').onclick = () => nav(-1);
     document.getElementById('waw-next').onclick = () => nav(1);
-    document.getElementById('waw-apply').onclick = () => {
-      // Find the apply button in the hidden WaterlooWorks modal
-      const selectors = [
-        'button.btn.btn--primary',                    // Primary action button
-        'button[class*="primary"]',                   // Any primary button
-        'a.btn.btn--primary',                         // Primary link button
-        '.modal__content button.btn--primary',        // Button in modal
-        'div[data-v-70e7ded6-s] button.btn--primary', // Vue modal button
-        'button:contains("Apply")',                   // Button with Apply text
-        '[class*="apply"]',                           // Any element with apply class
-        'a[href*="apply"]',                           // Link with apply in href
-        '.dashboard-header__actions button',          // Actions area button
-        'button.btn:not(.btn--secondary):not(.btn--tertiary)' // Non-secondary buttons
-      ];
-      
-      let btn = null;
-      for (const sel of selectors) {
-        try {
-          btn = document.querySelector(sel);
-          if (btn) {
-            console.log('[WAW] Found apply button with selector:', sel);
-            break;
-          }
-        } catch(e) {}
+    
+    // Helper function to click a button in the CURRENT WaterlooWorks modal
+    const clickCurrentModalButton = (iconName) => {
+      if (!currentWWModal) {
+        console.log('[WAW] No current modal stored!');
+        return false;
       }
       
-      // Fallback: find button by text content
-      if (!btn) {
-        const allBtns = document.querySelectorAll('button, a.btn');
-        for (const b of allBtns) {
-          if (b.textContent?.toLowerCase().includes('apply')) {
-            btn = b;
-            console.log('[WAW] Found apply button by text content');
+      console.log('[WAW] Looking for', iconName, 'button');
+      
+      // Find the modal container - go up to find the parent that contains both modal content and navbar
+      let modalContainer = currentWWModal;
+      // Try to find the Vue modal wrapper that contains the navbar
+      while (modalContainer && !modalContainer.querySelector('nav.floating--action-bar')) {
+        if (modalContainer.parentElement) {
+          modalContainer = modalContainer.parentElement;
+        } else {
+          break;
+        }
+        // Stop if we've gone too far up
+        if (modalContainer === document.body) {
+          modalContainer = currentWWModal;
+          break;
+        }
+      }
+      
+      // Store original styles for elements we'll modify
+      const elementsToRestore = [];
+      
+      // Make the modal container and its children accessible
+      const makeAccessible = (el) => {
+        if (!el) return;
+        elementsToRestore.push({ el, style: el.getAttribute('style') || '' });
+        el.style.cssText = 'position:fixed;top:0;left:0;opacity:0.01;pointer-events:auto;z-index:1;';
+      };
+      
+      makeAccessible(modalContainer);
+      makeAccessible(currentWWModal);
+      
+      // Find the navbar - search in container, then siblings, then document
+      let navbar = modalContainer.querySelector('nav.floating--action-bar');
+      if (!navbar) {
+        // Try finding navbar as sibling
+        navbar = currentWWModal.parentElement?.querySelector('nav.floating--action-bar');
+      }
+      if (!navbar) {
+        // Last resort - find any floating action bar on the page
+        navbar = document.querySelector('nav.floating--action-bar');
+      }
+      
+      console.log('[WAW] Found navbar:', !!navbar);
+      
+      let clicked = false;
+      if (navbar) {
+        makeAccessible(navbar);
+        const btns = navbar.querySelectorAll('button');
+        console.log('[WAW] Found', btns.length, 'buttons in navbar');
+        
+        for (const btn of btns) {
+          const icon = btn.querySelector('i.material-icons');
+          const iconText = icon?.textContent?.trim();
+          console.log('[WAW] Button icon:', iconText);
+          if (iconText === iconName) {
+            console.log('[WAW] Clicking button with icon:', iconName);
+            btn.style.pointerEvents = 'auto';
+            btn.click();
+            clicked = true;
             break;
           }
         }
       }
       
-      if (btn) {
-        btn.click();
-      } else {
-        console.log('[WAW] Apply button not found');
+      // Restore original styles after a short delay
+      setTimeout(() => {
+        elementsToRestore.forEach(({ el, style }) => {
+          el.style.cssText = style || 'position:fixed!important;top:-9999px!important;left:-9999px!important;visibility:hidden!important;opacity:0!important;pointer-events:auto!important;';
+        });
+      }, 100);
+      
+      if (!clicked) {
+        console.log('[WAW] Button with icon', iconName, 'not found');
       }
+      
+      return clicked;
+    };
+    
+    // Action buttons - trigger buttons in the CURRENT WaterlooWorks modal
+    document.getElementById('waw-save').onclick = () => {
+      console.log('[WAW] Save button clicked');
+      clickCurrentModalButton('create_new_folder');
+      // Mark job as saved and update badge
+      if (currentJobId) {
+        markJobAsSaved(currentJobId);
+      }
+    };
+    
+    document.getElementById('waw-apply').onclick = () => {
+      console.log('[WAW] Apply button clicked');
+      clickCurrentModalButton('playlist_add');
+    };
+    
+    document.getElementById('waw-print').onclick = () => {
+      console.log('[WAW] Print button clicked');
+      clickCurrentModalButton('print');
     };
 
     document.addEventListener('keydown', keyHandler);
@@ -551,6 +710,10 @@
 
   function handleModal(modal) {
     if (isActive) return;
+    
+    // Store reference to the current WaterlooWorks modal for action buttons
+    currentWWModal = modal;
+    console.log('[WAW] Stored current modal reference');
     
     // Show loading overlay IMMEDIATELY to cover the original modal
     showOverlay({ 
@@ -613,7 +776,25 @@
     const sidebarEl = document.getElementById('waw-sidebar');
     
     if (titleEl) titleEl.textContent = data.title || 'Position';
-    if (companyEl) companyEl.textContent = `@ ${data.company || 'Company'}`;
+    
+    // Update current job ID and saved badge
+    currentJobId = data.jobId;
+    updateSavedBadge(isJobSaved(currentJobId));
+    if (companyEl) {
+      companyEl.innerHTML = `@ <span id="waw-company-name">${esc(data.company) || 'Company'}</span>`;
+      companyEl.dataset.company = data.company;
+      
+      // Fetch company URL
+      if (data.company) {
+        fetchCompanyUrl(data.company).then(result => {
+          const companyNameEl = document.getElementById('waw-company-name');
+          if (result && companyNameEl) {
+            const title = result.isSearch ? 'Search for company' : 'Visit company website';
+            companyNameEl.innerHTML = `<a href="${result.url}" target="_blank" title="${title}">${esc(data.company)}</a>`;
+          }
+        });
+      }
+    }
     
     if (bodyEl) {
       let content = '';

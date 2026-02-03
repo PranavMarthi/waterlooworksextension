@@ -38,10 +38,6 @@
     },
     {
       "matches": ["https://waterlooworks.uwaterloo.ca/*"],
-      "css": [
-        "ui/themes/base.css",
-        "ui/layout/keyboard-nav.css"
-      ],
       "js": [
         "utils/storage.js",
         "utils/selectors.js",
@@ -66,7 +62,8 @@
   ],
 
   "host_permissions": [
-    "https://waterlooworks.uwaterloo.ca/*"
+    "https://waterlooworks.uwaterloo.ca/*",
+    "https://autocomplete.clearbit.com/*"
   ],
 
   "web_accessible_resources": [

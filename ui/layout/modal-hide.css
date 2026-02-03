@@ -2,7 +2,10 @@
 
 /* 
  * Strategy: Hide the modal visually but keep it in DOM for parsing.
- * Use clip-path to make it invisible without affecting layout.
+ * Our custom overlay provides the UI, original modal stays hidden but functional.
+ * 
+ * NOTE: These rules target specific modal elements that only exist on job posting pages,
+ * so they won't affect login/logout/home pages.
  */
 
 /* Target the WaterlooWorks Vue modal container */

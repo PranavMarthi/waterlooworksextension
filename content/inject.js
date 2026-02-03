@@ -9,16 +9,22 @@ const Azure = {
   settings: null,
 
   /**
-   * Check if current page is a login/home page
+   * Check if current page is a login/home/logout page that should not be styled
    */
   isLoginPage() {
     const url = window.location.href;
     const path = window.location.pathname;
+    const pageText = document.body?.innerText || '';
+    
     return path === '/' || 
            path === '/home.htm' || 
            path.includes('/login') ||
+           path.includes('/logout') ||
+           path.includes('/sso/') ||
            url.includes('home.htm') ||
-           document.querySelector('#loginForm, form[action*="login"]') !== null;
+           document.querySelector('#loginForm, form[action*="login"]') !== null ||
+           pageText.includes('You are now signed out') ||
+           pageText.includes('Log in again');
   },
 
   /**
@@ -45,10 +51,11 @@ const Azure = {
       // Initialize observers
       window.AzureObservers.init();
 
-      // Mark login page to protect its styling
+      // Mark login page and inject dark theme so it matches reference (no enhancement CSS)
       if (this.isLoginPage()) {
         document.body.classList.add('waw-login-page');
-        console.log('[WAW] Login page detected, minimal styling applied');
+        window.AzureDOMHooks.injectStylesheet(chrome.runtime.getURL('ui/themes/login-page.css'), 'waw-login-page-css');
+        console.log('[WAW] Login page detected, dark theme applied');
       }
 
       // Apply initial state
@@ -157,6 +164,17 @@ const Azure = {
     
     const pageType = window.AzureSelectors.getCurrentPageType();
     console.log(`[Azure] Page type: ${pageType}`);
+
+    // Skip styling on login/logout pages
+    if (Azure.isLoginPage() || pageType === 'home' || pageType === 'login' || pageType === 'logout') {
+      console.log('[Azure] Login/logout page - skipping enhancements');
+      document.body?.classList.add('waw-login-page');
+      return;
+    }
+
+    // Inject enhancement CSS only on non-login pages (not in manifest so login stays untouched)
+    window.AzureDOMHooks.injectStylesheet(chrome.runtime.getURL('ui/themes/base.css'), 'waw-base-css');
+    window.AzureDOMHooks.injectStylesheet(chrome.runtime.getURL('ui/layout/keyboard-nav.css'), 'waw-keyboard-nav-css');
 
     // Add body class for styling
     window.AzureDOMHooks.addBodyClass('azure-enhanced');

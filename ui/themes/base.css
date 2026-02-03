@@ -74,10 +74,35 @@
 
   /* Legacy aliases for backward compatibility */
   --azure-primary: var(--waw-primary);
+  --azure-primary-hover: var(--waw-primary-hover);
   --azure-bg-primary: var(--waw-bg-primary);
   --azure-bg-secondary: var(--waw-bg-secondary);
+  --azure-bg-hover: var(--waw-bg-hover);
   --azure-text-primary: var(--waw-text-primary);
+  --azure-text-secondary: var(--waw-text-secondary);
   --azure-font-family: var(--waw-font-family);
+  --azure-border-light: var(--waw-border-light);
+  --azure-spacing-xs: var(--waw-spacing-xs);
+  --azure-spacing-sm: var(--waw-spacing-sm);
+  --azure-spacing-md: var(--waw-spacing-md);
+  --azure-spacing-lg: var(--waw-spacing-lg);
+  --azure-spacing-xl: var(--waw-spacing-xl);
+  --azure-radius-sm: var(--waw-radius-sm);
+  --azure-radius-md: var(--waw-radius-md);
+  --azure-radius-lg: var(--waw-radius-lg);
+  --azure-radius-full: var(--waw-radius-full);
+  --azure-transition-fast: var(--waw-transition-fast);
+  --azure-transition-normal: var(--waw-transition-normal);
+  --azure-shadow-sm: var(--waw-shadow-sm);
+  --azure-shadow-md: var(--waw-shadow-md);
+  --azure-shadow-lg: var(--waw-shadow-lg);
+  --azure-font-size-xs: var(--waw-font-size-xs);
+  --azure-font-size-sm: var(--waw-font-size-sm);
+  --azure-font-size-md: var(--waw-font-size-md);
+  --azure-font-size-lg: var(--waw-font-size-lg);
+  --azure-font-size-xl: var(--waw-font-size-xl);
+  --azure-z-fixed: var(--waw-z-fixed);
+  --azure-accent-light: rgba(102, 126, 234, 0.2);
 }
 
 /* Dark mode overrides */
@@ -115,13 +140,40 @@ body.azure-enhanced * {
   font-family: inherit;
 }
 
+/* Preserve Material Icons font */
+body.waw-enhanced .material-icons,
+body.waw-enhanced .material-icons-outlined,
+body.waw-enhanced .material-icons-round,
+body.waw-enhanced .material-icons-sharp,
+body.waw-enhanced .material-icons-two-tone,
+body.waw-enhanced [class*="material-icon"],
+body.azure-enhanced .material-icons,
+body.azure-enhanced .material-icons-outlined,
+body.azure-enhanced .material-icons-round,
+body.azure-enhanced .material-icons-sharp,
+body.azure-enhanced .material-icons-two-tone,
+body.azure-enhanced [class*="material-icon"] {
+  font-family: 'Material Icons' !important;
+}
+
 /* ============================================
    LOGIN PAGE PROTECTION
-   Don't mess with the login/home page styling
+   Don't mess with the login/home/logout page styling
    ============================================ */
 body.waw-login-page,
-body.azure-page-home {
+body.azure-page-home,
+body.azure-page-login,
+body.azure-page-logout {
   background-color: inherit !important;
+  font-family: inherit !important;
+}
+
+/* Reset ALL our styling on login/logout pages */
+body.waw-login-page *,
+body.azure-page-home *,
+body.azure-page-login *,
+body.azure-page-logout * {
+  font-family: inherit !important;
 }
 
 body.waw-login-page .waw-enhanced,
@@ -131,11 +183,15 @@ body.azure-page-home .azure-themed {
   background-color: transparent !important;
 }
 
-/* Hide our enhancements on login page */
+/* Hide our enhancements on login/logout pages */
 body.waw-login-page #waw-modal-nav,
 body.waw-login-page .waw-row-indicator,
+body.waw-login-page #waw-overlay,
 body.azure-page-home #waw-modal-nav,
-body.azure-page-home .waw-row-indicator {
+body.azure-page-home .waw-row-indicator,
+body.azure-page-home #waw-overlay,
+body.azure-page-login #waw-overlay,
+body.azure-page-logout #waw-overlay {
   display: none !important;
 }
 

@@ -1,0 +1,107 @@
+/**
+ * Login / Logout page dark theme for WaterlooWorks
+ * Scoped to body.waw-login-page so it only applies on login/home/logout pages.
+ * Matches reference: dark header/footer, black main area, golden accents.
+ */
+
+body.waw-login-page {
+  background-color: #000 !important;
+  color: #fff !important;
+}
+
+/* Header bar */
+body.waw-login-page header,
+body.waw-login-page .header__container,
+body.waw-login-page #orbisHeaderDiv,
+body.waw-login-page [class*="header"] {
+  background-color: #1a1a1a !important;
+  color: #fff !important;
+  border-bottom: none !important;
+}
+
+body.waw-login-page header a,
+body.waw-login-page .header__container a,
+body.waw-login-page #orbisHeaderDiv a {
+  color: #e0e0e0 !important;
+}
+
+/* Footer bar */
+body.waw-login-page footer,
+body.waw-login-page #orbisFooterDiv,
+body.waw-login-page [class*="footer"] {
+  background-color: #1a1a1a !important;
+  color: #fff !important;
+  border-top: none !important;
+}
+
+/* Main content area - black background, centered */
+body.waw-login-page #mainContentDiv,
+body.waw-login-page main,
+body.waw-login-page .main-content,
+body.waw-login-page [id*="mainContent"],
+body.waw-login-page [class*="mainContent"] {
+  background-color: #000 !important;
+  color: #fff !important;
+}
+
+/* Page container / wrapper */
+body.waw-login-page .container,
+body.waw-login-page .content-wrapper,
+body.waw-login-page [class*="contentContainer"] {
+  background-color: transparent !important;
+  color: #fff !important;
+}
+
+/* Title "WaterlooWorks" and crest area */
+body.waw-login-page h1,
+body.waw-login-page .title,
+body.waw-login-page [class*="branding"] {
+  color: #fff !important;
+}
+
+/* "HIRE WATERLOO" - golden/yellow */
+body.waw-login-page .subtitle,
+body.waw-login-page [class*="slogan"],
+body.waw-login-page p:first-of-type {
+  color: #d4a84b !important;
+}
+
+/* "Students and Alumni" and supporting text */
+body.waw-login-page .supporting-text,
+body.waw-login-page small {
+  color: #fff !important;
+}
+
+/* Role selection buttons - dark bg, golden border and text */
+body.waw-login-page .btn,
+body.waw-login-page button,
+body.waw-login-page a[role="button"],
+body.waw-login-page input[type="submit"],
+body.waw-login-page [class*="button"] {
+  background-color: #000 !important;
+  color: #d4a84b !important;
+  border: 1px solid #d4a84b !important;
+}
+
+body.waw-login-page .btn:hover,
+body.waw-login-page button:hover,
+body.waw-login-page a[role="button"]:hover {
+  background-color: #1a1a1a !important;
+  color: #e8bc5e !important;
+  border-color: #e8bc5e !important;
+}
+
+/* Links in main content */
+body.waw-login-page a {
+  color: #d4a84b !important;
+}
+
+body.waw-login-page a:hover {
+  color: #e8bc5e !important;
+}
+
+/* Copyright / legal text at bottom */
+body.waw-login-page .copyright,
+body.waw-login-page [class*="copyright"] {
+  color: #999 !important;
+}
