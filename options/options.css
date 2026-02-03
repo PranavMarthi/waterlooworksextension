@@ -303,6 +303,26 @@ body {
   box-shadow: 0 0 0 3px rgba(69, 182, 247, 0.2);
 }
 
+/* Text input */
+.text-input {
+  width: 220px;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.text-input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(69, 182, 247, 0.2);
+}
+
+.shortlist-input-wrap {
+  display: flex;
+  align-items: center;
+}
+
 /* Welcome Section */
 .welcome-section {
   background: linear-gradient(135deg, #e8f4fd 0%, #d4ecfb 100%);

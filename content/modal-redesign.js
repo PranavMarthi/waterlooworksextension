@@ -39,6 +39,29 @@
   let currentWWModal = null; // Reference to the current WaterlooWorks modal
   let currentJobId = null; // Track current job ID for saved status
 
+  function safeClick(element) {
+    if (!element) return false;
+    const tag = element.tagName ? element.tagName.toLowerCase() : '';
+    const isAnchor = tag === 'a';
+    const href = isAnchor ? element.getAttribute('href') || '' : '';
+    const isJavascriptHref = isAnchor && href.trim().toLowerCase().startsWith('javascript:');
+    let restoreHref = null;
+
+    if (isJavascriptHref) {
+      restoreHref = href;
+      element.setAttribute('href', '#');
+      element.addEventListener('click', (event) => event.preventDefault(), { capture: true, once: true });
+    }
+
+    element.click();
+
+    if (restoreHref !== null) {
+      element.setAttribute('href', restoreHref);
+    }
+
+    return true;
+  }
+
   // ============================================
   // AGGRESSIVE: Hide modal instantly via inline styles
   // Keep elements in DOM for button triggering
@@ -92,6 +115,18 @@
       // Fallback: try other selectors
       jobLinks = Array.from(document.querySelectorAll('tr[data-job-id] a, .job-listing a, table a[onclick]'));
     }
+    jobLinks.forEach((link) => {
+      if (link?.tagName?.toLowerCase() !== 'a') return;
+      const href = link.getAttribute('href') || '';
+      if (href.trim().toLowerCase().startsWith('javascript:')) {
+        link.dataset.wawOriginalHref = link.dataset.wawOriginalHref || href;
+        link.setAttribute('href', '#');
+        if (!link.dataset.wawJsSanitized) {
+          link.addEventListener('click', (event) => event.preventDefault(), true);
+          link.dataset.wawJsSanitized = 'true';
+        }
+      }
+    });
     console.log('[WAW] Found job links:', jobLinks.length);
     return jobLinks;
   }
@@ -163,7 +198,7 @@
       const link = jobLinks[newIndex];
       if (link) {
         console.log('[WAW] Clicking job link:', link.textContent?.substring(0, 50));
-        link.click();
+        safeClick(link);
         
         // After clicking, wait for modal to appear and handle it
         setTimeout(() => {
@@ -682,9 +717,47 @@
     };
     
     // Action buttons - trigger buttons in the CURRENT WaterlooWorks modal
-    document.getElementById('waw-save').onclick = () => {
+    document.getElementById('waw-save').onclick = async () => {
       console.log('[WAW] Save button clicked');
-      clickCurrentModalButton('create_new_folder');
+      let selectedFolder = '';
+
+      try {
+        if (window.AzureStorage?.getSettings) {
+          const settings = await window.AzureStorage.getSettings(['shortlistFolderName']);
+          if (settings?.shortlistFolderName) {
+            selectedFolder = settings.shortlistFolderName;
+          }
+        }
+      } catch (e) {
+        // Ignore storage errors
+      }
+
+      if (!selectedFolder) {
+        window.WAWNavigator?.notify?.('Select or create a shortlist folder in the extension popup', 'info');
+        return;
+      }
+
+      if (!window.WAWFolderManager?.getFolders || !window.WAWFolderManager?.selectFolder) {
+        window.WAWNavigator?.notify?.('Folder picker unavailable. Refresh the page and try again.', 'error');
+        return;
+      }
+
+      const folders = await window.WAWFolderManager.getFolders({ forceOpen: true });
+      const folderExists = Array.isArray(folders) && folders.some((name) => {
+        return (name || '').trim().toLowerCase() === selectedFolder.trim().toLowerCase();
+      });
+
+      if (!folderExists) {
+        window.WAWNavigator?.notify?.('Select a shortlist folder in the extension popup', 'info');
+        return;
+      }
+
+      const result = await window.WAWFolderManager.selectFolder(selectedFolder, currentJobId);
+      if (!result?.success) {
+        window.WAWNavigator?.notify?.('Could not select folder. Open a posting and try again.', 'error');
+        return;
+      }
+
       // Mark job as saved and update badge
       if (currentJobId) {
         markJobAsSaved(currentJobId);

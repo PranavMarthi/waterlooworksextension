@@ -17,6 +17,8 @@ const DefaultSettings = {
   highlightNew: true,
   openInNewTab: true,
   newJobDaysThreshold: 7,
+  shortlistFolderName: 'shortlist',
+  shortlistFolders: [],
   jobRearrangerEnabled: true,
   jobRearrangerPriorityKeys: ['duration', 'location', 'compensation', 'deadline', 'method'],
   jobRearrangerStandardOrder: ['job_description', 'responsibilities', 'required_skills', 'targeted_degrees'],
@@ -39,6 +41,8 @@ const elements = {
   layoutCompact: document.getElementById('layout-compact'),
   stickyNav: document.getElementById('sticky-nav'),
   highlightNew: document.getElementById('highlight-new'),
+  shortlistFolder: document.getElementById('shortlist-folder'),
+  shortlistFolderList: document.getElementById('shortlist-folder-list'),
   openNewTab: document.getElementById('open-new-tab'),
   batchOperations: document.getElementById('batch-operations'),
   newJobDays: document.getElementById('new-job-days'),
@@ -68,6 +72,19 @@ async function loadSettings() {
     elements.layoutCompact.checked = settings.layoutCompact;
     elements.stickyNav.checked = settings.stickyNav;
     elements.highlightNew.checked = settings.highlightNew;
+    if (elements.shortlistFolder) {
+      elements.shortlistFolder.value = settings.shortlistFolderName || DefaultSettings.shortlistFolderName;
+    }
+    if (elements.shortlistFolderList) {
+      const folderList = Array.isArray(settings.shortlistFolders) ? settings.shortlistFolders : [];
+      elements.shortlistFolderList.innerHTML = '';
+      folderList.forEach((name) => {
+        if (!name) return;
+        const option = document.createElement('option');
+        option.value = name;
+        elements.shortlistFolderList.appendChild(option);
+      });
+    }
     elements.openNewTab.checked = settings.openInNewTab;
     elements.batchOperations.checked = settings.batchOperations;
     if (elements.newJobDays) {
@@ -191,6 +208,12 @@ function initEventListeners() {
   // Job Postings
   elements.highlightNew.addEventListener('change', (e) => {
     saveSetting('highlightNew', e.target.checked);
+  });
+
+  elements.shortlistFolder?.addEventListener('blur', (e) => {
+    const value = e.target.value.trim() || DefaultSettings.shortlistFolderName;
+    e.target.value = value;
+    saveSetting('shortlistFolderName', value);
   });
 
   elements.openNewTab.addEventListener('change', (e) => {

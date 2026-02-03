@@ -22,6 +22,8 @@ const StorageKeys = {
   HIGHLIGHT_NEW: 'highlightNew',
   OPEN_IN_NEW_TAB: 'openInNewTab',
   NEW_JOB_DAYS_THRESHOLD: 'newJobDaysThreshold',
+  SHORTLIST_FOLDER_NAME: 'shortlistFolderName',
+  SHORTLIST_FOLDERS: 'shortlistFolders',
 
   // Job posting layout / rearranger
   JOB_REARRANGER_ENABLED: 'jobRearrangerEnabled',
@@ -50,6 +52,8 @@ const DefaultSettings = {
   [StorageKeys.HIGHLIGHT_NEW]: true,
   [StorageKeys.OPEN_IN_NEW_TAB]: true,
   [StorageKeys.NEW_JOB_DAYS_THRESHOLD]: 7,
+  [StorageKeys.SHORTLIST_FOLDER_NAME]: 'shortlist',
+  [StorageKeys.SHORTLIST_FOLDERS]: [],
   [StorageKeys.JOB_REARRANGER_ENABLED]: true,
   [StorageKeys.JOB_REARRANGER_PRIORITY_KEYS]: ['duration', 'location', 'compensation', 'deadline', 'method'],
   [StorageKeys.JOB_REARRANGER_STANDARD_ORDER]: ['job_description', 'responsibilities', 'required_skills', 'targeted_degrees'],

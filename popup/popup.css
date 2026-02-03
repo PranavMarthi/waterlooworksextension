@@ -161,6 +161,96 @@ body {
   font-weight: 500;
 }
 
+/* Shortlist section */
+.shortlist-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 16px;
+}
+
+.shortlist-section span {
+  font-weight: 500;
+}
+
+.shortlist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.shortlist-refresh {
+  padding: 4px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-secondary);
+  cursor: pointer;
+}
+
+.shortlist-refresh:hover {
+  background-color: var(--bg-tertiary);
+  border-color: var(--primary);
+}
+
+.shortlist-section select {
+  width: 100%;
+  padding: 6px 8px;
+  font-size: 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-primary);
+}
+
+.shortlist-section select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(69, 182, 247, 0.2);
+}
+
+.shortlist-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.shortlist-controls input[type="text"] {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 13px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.shortlist-controls input[type="text"]:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(69, 182, 247, 0.2);
+}
+
+.shortlist-save {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--bg-secondary);
+  cursor: pointer;
+}
+
+.shortlist-save:hover {
+  background-color: var(--bg-tertiary);
+  border-color: var(--primary);
+}
+
+.shortlist-status {
+  font-size: 11px;
+  color: var(--text-secondary);
+  min-height: 14px;
+}
+
 /* Theme section */
 .theme-section {
   display: flex;
