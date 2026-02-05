@@ -580,6 +580,14 @@
     return null;
   }
 
+  function setCurrentIndexFromRow(row) {
+    if (!row) return;
+    const index = Number(row.dataset.wawIndex);
+    if (Number.isFinite(index)) {
+      currentJobIndex = index;
+    }
+  }
+
   function enhanceJobTable() {
     getAllJobLinks();
     
@@ -602,6 +610,21 @@
       // Store index on row for navigation
       row.dataset.wawIndex = index;
       row.dataset.wawJobId = jobId;
+
+      if (!row.dataset.wawClickBound) {
+        row.addEventListener('click', (event) => {
+          const targetRow = event.target?.closest?.('tr') || row;
+          setCurrentIndexFromRow(targetRow);
+        });
+        row.dataset.wawClickBound = 'true';
+      }
+
+      if (!link.dataset.wawClickBound) {
+        link.addEventListener('click', () => {
+          setCurrentIndexFromRow(row);
+        });
+        link.dataset.wawClickBound = 'true';
+      }
     });
   }
 
@@ -653,6 +676,26 @@
     titleCell.appendChild(indicator);
   }
 
+  function ensureShortlistIndicator(jobId) {
+    const row = document.querySelector(`tr[data-waw-job-id="${jobId}"]`);
+    if (row && !row.querySelector('.waw-shortlist-indicator')) {
+      addShortlistIndicator(row, jobId);
+      return;
+    }
+
+    if (!row) {
+      const rows = Array.from(document.querySelectorAll('tr')).filter((tr) => tr.dataset?.wawIndex !== undefined);
+      for (const tr of rows) {
+        if (String(getJobIdFromRow(tr)) === String(jobId)) {
+          if (!tr.querySelector('.waw-shortlist-indicator')) {
+            addShortlistIndicator(tr, jobId);
+          }
+          break;
+        }
+      }
+    }
+  }
+
   function checkAndHighlightNewJob(row) {
     // Look for NEW badge or deadline text
     const hasNewBadge = row.querySelector('.badge-new') || 
@@ -676,6 +719,7 @@
       shortlistedJobs.delete(jobIdStr);
       showNotification('Removed from shortlist', 'remove');
       saveShortlist();
+      ensureShortlistIndicator(jobIdStr);
       document.querySelectorAll(`.waw-shortlist-indicator[data-job-id="${jobId}"]`).forEach(el => {
         el.innerHTML = '☆';
         el.title = 'Add to shortlist';
@@ -693,6 +737,7 @@
     }
 
     saveShortlist();
+    ensureShortlistIndicator(jobIdStr);
     
     // Update all indicators for this job
     document.querySelectorAll(`.waw-shortlist-indicator[data-job-id="${jobId}"]`).forEach(el => {
@@ -990,6 +1035,21 @@
     }
   }
 
+  function syncCurrentIndexFromModal() {
+    if (jobLinks.length === 0) {
+      getAllJobLinks();
+    }
+    const modalJobId = getCurrentModalJobId();
+    if (!modalJobId) return;
+    for (let i = 0; i < jobLinks.length; i++) {
+      const row = jobLinks[i].closest('tr');
+      if (row && String(getJobIdFromRow(row)) === String(modalJobId)) {
+        currentJobIndex = i;
+        return;
+      }
+    }
+  }
+
   function closeModal() {
     // Prevent infinite recursion
     if (isClosingModal) return;
@@ -1244,6 +1304,7 @@
               console.log('[WAW] Modal opened');
               setTimeout(() => {
                 addModalNavigationUI();
+                syncCurrentIndexFromModal();
               }, 300);
             }
           }
@@ -1391,6 +1452,14 @@
       if (changes.shortlistFolderName) {
         settings = settings || {};
         settings.shortlistFolderName = changes.shortlistFolderName.newValue;
+      }
+      if (changes.shortlistFolderReselect) {
+        chrome.storage.sync.get({ shortlistFolderName: DEFAULT_SETTINGS.shortlistFolderName })
+          .then((result) => {
+            settings = settings || {};
+            settings.shortlistFolderName = result.shortlistFolderName || DEFAULT_SETTINGS.shortlistFolderName;
+          })
+          .catch(() => {});
       }
     });
 

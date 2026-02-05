@@ -38,29 +38,9 @@
   let isActive = false;
   let currentWWModal = null; // Reference to the current WaterlooWorks modal
   let currentJobId = null; // Track current job ID for saved status
-
-  function safeClick(element) {
-    if (!element) return false;
-    const tag = element.tagName ? element.tagName.toLowerCase() : '';
-    const isAnchor = tag === 'a';
-    const href = isAnchor ? element.getAttribute('href') || '' : '';
-    const isJavascriptHref = isAnchor && href.trim().toLowerCase().startsWith('javascript:');
-    let restoreHref = null;
-
-    if (isJavascriptHref) {
-      restoreHref = href;
-      element.setAttribute('href', '#');
-      element.addEventListener('click', (event) => event.preventDefault(), { capture: true, once: true });
-    }
-
-    element.click();
-
-    if (restoreHref !== null) {
-      element.setAttribute('href', restoreHref);
-    }
-
-    return true;
-  }
+  let suppressHandleUntil = 0;
+  let suppressObserver = false;
+  let navigationIntentUntil = 0;
 
   // ============================================
   // AGGRESSIVE: Hide modal instantly via inline styles
@@ -107,28 +87,108 @@
   
   let jobLinks = [];
   let currentJobIndex = -1;
+  let isNavigating = false;
+  let lastClickedJobId = null;
+
+  const JOB_LINK_SELECTORS = [
+    'a.overflow--ellipsis',
+    'a.posting-title',
+    'a[href="javascript:void(0)"]',
+    'a[onclick]'
+  ];
 
   function refreshJobLinks() {
-    // Get all job title links from the table
-    jobLinks = Array.from(document.querySelectorAll('table tbody tr td a[href*="javascript"], table tbody tr a.posting-title'));
+    const rows = Array.from(document.querySelectorAll('table tbody tr'));
+    const links = [];
+
+    rows.forEach((row) => {
+      let link = null;
+      for (const selector of JOB_LINK_SELECTORS) {
+        link = row.querySelector(selector);
+        if (link) break;
+      }
+      if (!link) {
+        link = row.querySelector('a[href*="javascript"], a[onclick]');
+      }
+      if (link) links.push(link);
+    });
+
+    jobLinks = links;
     if (jobLinks.length === 0) {
-      // Fallback: try other selectors
-      jobLinks = Array.from(document.querySelectorAll('tr[data-job-id] a, .job-listing a, table a[onclick]'));
+      jobLinks = Array.from(document.querySelectorAll('tbody a'));
     }
-    jobLinks.forEach((link) => {
-      if (link?.tagName?.toLowerCase() !== 'a') return;
-      const href = link.getAttribute('href') || '';
-      if (href.trim().toLowerCase().startsWith('javascript:')) {
-        link.dataset.wawOriginalHref = link.dataset.wawOriginalHref || href;
-        link.setAttribute('href', '#');
-        if (!link.dataset.wawJsSanitized) {
-          link.addEventListener('click', (event) => event.preventDefault(), true);
-          link.dataset.wawJsSanitized = 'true';
+
+    jobLinks.forEach((link, index) => {
+      const row = link.closest('tr');
+      if (row) {
+        row.dataset.wawModalIndex = index;
+        if (!row.dataset.wawModalClickBound) {
+          row.addEventListener('click', () => {
+            const idx = Number(row.dataset.wawModalIndex);
+            if (Number.isFinite(idx)) currentJobIndex = idx;
+            const jid = getJobIdFromRow(row);
+            if (jid) lastClickedJobId = jid;
+          });
+          row.dataset.wawModalClickBound = 'true';
         }
+      }
+      if (!link.dataset.wawModalClickBound) {
+        link.addEventListener('click', () => {
+          currentJobIndex = index;
+          const jid = getJobIdFromRow(row);
+          if (jid) lastClickedJobId = jid;
+          navigationIntentUntil = Date.now() + 1200;
+        });
+        link.dataset.wawModalClickBound = 'true';
       }
     });
     console.log('[WAW] Found job links:', jobLinks.length);
     return jobLinks;
+  }
+
+  function getJobIdFromRow(row) {
+    if (!row) return null;
+    const checkbox = row.querySelector('input[type="checkbox"][name="dataViewerSelection"]');
+    if (checkbox && checkbox.value) {
+      return String(checkbox.value);
+    }
+
+    const firstTh = row.querySelector('th');
+    if (firstTh) {
+      const spans = firstTh.querySelectorAll('span');
+      for (const span of spans) {
+        const text = span.textContent.trim();
+        if (/^\d{6}$/.test(text)) {
+          return text;
+        }
+      }
+    }
+
+    const match = row.textContent.match(/\b\d{6}\b/);
+    if (match) return match[0];
+    return null;
+  }
+
+  function safeClick(element) {
+    if (!element) return false;
+    const tag = element.tagName ? element.tagName.toLowerCase() : '';
+    const isAnchor = tag === 'a';
+    const href = isAnchor ? element.getAttribute('href') || '' : '';
+    const isJavascriptHref = isAnchor && href.trim().toLowerCase().startsWith('javascript:');
+    let restoreHref = null;
+
+    if (isJavascriptHref) {
+      restoreHref = href;
+      element.setAttribute('href', '#');
+      element.addEventListener('click', (event) => event.preventDefault(), { capture: true, once: true });
+    }
+
+    element.click();
+
+    if (restoreHref !== null) {
+      element.setAttribute('href', restoreHref);
+    }
+    return true;
   }
 
   function getCurrentJobId() {
@@ -141,8 +201,20 @@
       const match = modal.innerHTML.match(/job[_-]?id["\s:=]+["']?(\d+)/i);
       if (match) return match[1];
     }
-    return null;
+    return currentJobId || lastClickedJobId || null;
   }
+
+  document.addEventListener('click', (event) => {
+    const link = event.target?.closest?.('a');
+    if (!link) return;
+    const row = link.closest('tr');
+    if (!row) return;
+    if (jobLinks.length === 0) refreshJobLinks();
+    const idx = Number(row.dataset.wawModalIndex);
+    if (Number.isFinite(idx)) currentJobIndex = idx;
+    const jid = getJobIdFromRow(row);
+    if (jid) lastClickedJobId = jid;
+  }, true);
 
   function findCurrentJobIndex() {
     if (jobLinks.length === 0) refreshJobLinks();
@@ -151,7 +223,7 @@
     if (currentId) {
       for (let i = 0; i < jobLinks.length; i++) {
         const row = jobLinks[i].closest('tr');
-        const rowId = row?.dataset?.jobId || row?.querySelector('[data-job-id]')?.dataset?.jobId;
+        const rowId = getJobIdFromRow(row) || row?.dataset?.jobId || row?.querySelector('[data-job-id]')?.dataset?.jobId;
         if (rowId === currentId) {
           return i;
         }
@@ -164,12 +236,39 @@
     return currentJobIndex >= 0 ? currentJobIndex : 0;
   }
 
+  function syncJobIndexFromId(jobId) {
+    if (!jobId) return;
+    if (jobLinks.length === 0) refreshJobLinks();
+    for (let i = 0; i < jobLinks.length; i++) {
+      const row = jobLinks[i].closest('tr');
+      const rowId = getJobIdFromRow(row) || row?.dataset?.jobId || row?.querySelector('[data-job-id]')?.dataset?.jobId;
+      if (rowId === jobId) {
+        currentJobIndex = i;
+        return;
+      }
+      if (jobLinks[i].href?.includes(jobId) || jobLinks[i].onclick?.toString()?.includes(jobId)) {
+        currentJobIndex = i;
+        return;
+      }
+    }
+    const selected = document.querySelector('tr.waw-selected');
+    if (selected?.dataset?.wawModalIndex) {
+      const idx = Number(selected.dataset.wawModalIndex);
+      if (Number.isFinite(idx)) currentJobIndex = idx;
+    }
+  }
+
   function navigateToJob(direction) {
     console.log('[WAW] navigateToJob called, direction:', direction);
     
+    if (isNavigating) return;
+    isNavigating = true;
+    navigationIntentUntil = Date.now() + 1200;
+
     if (jobLinks.length === 0) refreshJobLinks();
     if (jobLinks.length === 0) {
       console.log('[WAW] No job links found');
+      isNavigating = false;
       return;
     }
 
@@ -207,9 +306,12 @@
             console.log('[WAW] Modal found after navigation, handling...');
             handleModal(modal);
           }
+          isNavigating = false;
         }, 200);
+      } else {
+        isNavigating = false;
       }
-    }, 50);
+    }, 220);
   }
 
   // ============================================
@@ -419,46 +521,73 @@
     overlay.id = 'waw-overlay';
     overlay.innerHTML = `
       <style>
+        @keyframes waw-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes waw-card-in { from { opacity: 0; transform: scale(0.98) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
         #waw-overlay {
           position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-          background: rgba(0,0,0,0.55); display: flex; align-items: center; justify-content: center;
-          z-index: 9999999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+          background: rgba(0,0,0,0.52); display: flex; align-items: center; justify-content: center;
+          z-index: 9999999; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+          -webkit-font-smoothing: antialiased;
+          animation: waw-overlay-in 0.2s ease;
         }
         #waw-card {
           display: flex; width: 92%; max-width: 980px; max-height: 85vh;
-          background: #e8eff5; border-radius: 20px; box-shadow: 0 25px 80px rgba(0,0,0,0.35);
+          background: #f0f4f8; border-radius: 24px;
+          box-shadow: 0 32px 64px rgba(0,0,0,0.2), 0 0 0 1px rgba(0,0,0,0.04);
           overflow: hidden; position: relative;
+          transition: box-shadow 0.2s ease, transform 0.2s ease;
+          animation: waw-card-in 0.25s ease;
         }
-        #waw-main { flex: 1; padding: 36px 42px; display: flex; flex-direction: column; overflow: hidden; }
-        #waw-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
-        #waw-title { font-size: 32px; font-weight: 700; color: #1a1a2e; margin: 0; flex: 1; }
-        #waw-saved-badge { display: none; padding: 6px 12px; background: #48bb78; color: white; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+        #waw-card:focus-within { box-shadow: 0 40px 80px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.06); }
+        #waw-main { flex: 1; padding: 40px 44px; display: flex; flex-direction: column; overflow: hidden; }
+        #waw-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px; }
+        #waw-title {
+          font-size: 28px; font-weight: 700; color: #0f172a; margin: 0; flex: 1;
+          line-height: 1.25; letter-spacing: -0.02em;
+        }
+        #waw-saved-badge { display: none; padding: 6px 12px; background: #0d9488; color: white; border-radius: 10px; font-size: 12px; font-weight: 600; white-space: nowrap; }
         #waw-saved-badge.visible { display: inline-block; }
-        #waw-company { font-size: 17px; color: #4a5568; margin-bottom: 28px; }
-        #waw-company a { color: #4a5568; text-decoration: underline; }
-        #waw-company a:hover { color: #2d3748; }
-        #waw-body { flex: 1; overflow-y: auto; padding-right: 12px; }
-        #waw-body::-webkit-scrollbar { width: 5px; }
-        #waw-body::-webkit-scrollbar-thumb { background: #bfc8d0; border-radius: 3px; }
-        .waw-section { margin-bottom: 24px; }
-        .waw-section-title { font-size: 14px; font-weight: 700; color: #1a1a2e; margin-bottom: 10px; }
-        .waw-section-content { font-size: 14px; color: #4a5568; line-height: 1.75; }
-        #waw-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 20px; }
-        #waw-actions { display: flex; gap: 8px; }
-        .waw-action-btn { padding: 12px 20px; background: #d3dce5; border: none; border-radius: 20px; font-size: 14px; font-weight: 600; color: #2d3748; cursor: pointer; display: flex; align-items: center; gap: 6px; }
-        .waw-action-btn:hover { background: #c6d0da; }
-        #waw-apply { background: #4a5568; color: #fff; }
-        #waw-apply:hover { background: #2d3748; }
-        #waw-nav { display: flex; background: #d3dce5; border-radius: 26px; overflow: hidden; }
-        .waw-nav-btn { width: 60px; height: 46px; border: none; background: transparent; font-size: 18px; color: #4a5568; cursor: pointer; }
-        .waw-nav-btn:hover { background: rgba(0,0,0,0.06); }
-        .waw-nav-btn:first-child { border-right: 1px solid rgba(0,0,0,0.1); }
-        #waw-sidebar { width: 270px; padding: 36px 24px; background: #f3f5f8; flex-shrink: 0; }
-        .waw-info { margin-bottom: 18px; }
-        .waw-info-label { font-size: 13px; font-weight: 700; color: #1a1a2e; margin-bottom: 4px; }
-        .waw-info-value { font-size: 14px; color: #4a5568; line-height: 1.5; }
-        #waw-close { position: absolute; top: 14px; right: 14px; width: 34px; height: 34px; border-radius: 50%; background: rgba(0,0,0,0.08); border: none; font-size: 22px; color: #555; cursor: pointer; }
-        #waw-close:hover { background: rgba(0,0,0,0.12); }
+        #waw-company { font-size: 16px; color: #475569; margin-bottom: 24px; font-weight: 500; }
+        #waw-company a { color: #0d9488; text-decoration: none; border-bottom: 1px solid transparent; transition: color 0.15s ease, border-color 0.15s ease; }
+        #waw-company a:hover { color: #0f766e; border-bottom-color: #0d9488; }
+        #waw-body { flex: 1; overflow-y: auto; padding-right: 14px; }
+        #waw-body::-webkit-scrollbar { width: 6px; }
+        #waw-body::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        #waw-body::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .waw-section { margin-bottom: 28px; }
+        .waw-section-title {
+          font-size: 11px; font-weight: 700; color: #0d9488; text-transform: uppercase; letter-spacing: 0.06em;
+          margin-bottom: 10px;
+        }
+        .waw-section-content { font-size: 15px; color: #334155; line-height: 1.8; }
+        #waw-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 22px; border-top: 1px solid rgba(0,0,0,0.06); }
+        #waw-actions { display: flex; gap: 10px; }
+        .waw-action-btn {
+          padding: 12px 20px; background: #e2e8f0; border: none; border-radius: 12px; font-size: 14px; font-weight: 600; color: #334155;
+          cursor: pointer; display: flex; align-items: center; gap: 6px;
+          transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+        }
+        .waw-action-btn:hover { background: #cbd5e1; transform: translateY(-1px); }
+        .waw-action-btn:active { transform: translateY(0); }
+        #waw-apply { background: #0d9488; color: #fff; }
+        #waw-apply:hover { background: #0f766e; color: #fff; }
+        #waw-nav { display: flex; background: #e2e8f0; border-radius: 14px; overflow: hidden; }
+        .waw-nav-btn {
+          width: 60px; height: 46px; border: none; background: transparent; font-size: 18px; color: #475569; cursor: pointer;
+          transition: background 0.15s ease, color 0.15s ease;
+        }
+        .waw-nav-btn:hover { background: #0d9488; color: #fff; }
+        .waw-nav-btn:first-child { border-right: 1px solid rgba(0,0,0,0.08); }
+        #waw-sidebar { width: 270px; padding: 36px 24px; background: #e8eef4; flex-shrink: 0; border-left: 1px solid rgba(0,0,0,0.05); }
+        .waw-info { margin-bottom: 20px; }
+        .waw-info-label { font-size: 11px; font-weight: 700; color: #0d9488; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+        .waw-info-value { font-size: 14px; color: #475569; line-height: 1.55; }
+        #waw-close {
+          position: absolute; top: 16px; right: 16px; width: 36px; height: 36px; border-radius: 50%;
+          background: rgba(0,0,0,0.06); border: none; font-size: 22px; color: #64748b; cursor: pointer;
+          transition: background 0.15s ease, color 0.15s ease;
+        }
+        #waw-close:hover { background: rgba(0,0,0,0.1); color: #334155; }
       </style>
       
       <div id="waw-card">
@@ -524,16 +653,102 @@
       
       // Remove our overlay
       if (overlay) { overlay.remove(); overlay = null; }
+      document.querySelectorAll('#waw-overlay').forEach((el) => el.remove());
       document.body.classList.remove('waw-active');
       isActive = false;
-      document.removeEventListener('keydown', keyHandler);
-      
-      // Close the hidden WaterlooWorks modal
-      const closeBtn = document.querySelector('button[aria-label="Close"], .modal__close');
-      if (closeBtn) {
-        console.log('[WAW] Clicking WW close button');
-        closeBtn.click();
-      }
+      document.removeEventListener('keydown', keyHandler, true);
+      suppressHandleUntil = Date.now() + 800;
+      suppressObserver = true;
+      setTimeout(() => { suppressObserver = false; }, 1000);
+
+      const modalNodes = document.querySelectorAll('div[data-v-70e7ded6-s], .modal__content, .modal, [role="dialog"]');
+      modalNodes.forEach((node) => {
+        if (node) node.dataset.wawSuppress = 'true';
+      });
+      setTimeout(() => {
+        modalNodes.forEach((node) => {
+          if (node) delete node.dataset.wawSuppress;
+        });
+      }, 800);
+
+      const closeWaterlooModal = () => {
+        console.log('[WAW] closeWaterlooModal: modals', document.querySelectorAll('div[data-v-70e7ded6-s], .modal__content, .modal, [role="dialog"]').length);
+        const closeButtons = document.querySelectorAll(
+          'div[data-v-70e7ded6-s] button[aria-label="Close"], .modal__close, button.close, [data-dismiss="modal"]'
+        );
+        console.log('[WAW] closeWaterlooModal: closeButtons', closeButtons.length);
+        let clicked = false;
+        closeButtons.forEach((btn) => {
+          if (btn) {
+            btn.click();
+            clicked = true;
+          }
+        });
+
+        if (!clicked) {
+          const modal = document.querySelector('div[data-v-70e7ded6-s], .modal__content, .modal, [role="dialog"]');
+          const modalClose = modal?.querySelector?.('button[aria-label="Close"], .modal__close, button.close');
+          if (modalClose) {
+            modalClose.click();
+            clicked = true;
+          }
+        }
+
+        if (!clicked) {
+          const backdrop = document.querySelector('.modal-backdrop, .overlay, [data-dismiss="modal"]');
+          console.log('[WAW] closeWaterlooModal: fallback backdrop', !!backdrop);
+          if (backdrop) {
+            backdrop.click();
+          } else {
+            const modal = document.querySelector('div[data-v-70e7ded6-s], .modal__content, .modal, [role="dialog"]');
+            if (modal) {
+              modal.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            }
+          }
+        }
+      };
+
+      // Close the hidden WaterlooWorks modal (retry a few times)
+      closeWaterlooModal();
+      setTimeout(closeWaterlooModal, 120);
+      setTimeout(closeWaterlooModal, 300);
+
+      // Hard-hide any remaining modals/backdrops as a last resort
+      const hardHide = () => {
+        console.log('[WAW] hardHide: backdrops', document.querySelectorAll('.modal-backdrop, .overlay').length);
+        document.querySelectorAll('.modal-backdrop, .overlay').forEach((el) => {
+          if (!el) return;
+          el.remove();
+        });
+      };
+      hardHide();
+      setTimeout(hardHide, 180);
+
+      // Debug scan for click blockers after close
+      const scanClickBlockers = () => {
+        const blockers = [];
+        document.querySelectorAll('body *').forEach((el) => {
+          const rect = el.getBoundingClientRect();
+          if (rect.width < 50 || rect.height < 50) return;
+          if (rect.top > 0 || rect.left > 0) return;
+          if (rect.width < window.innerWidth * 0.9 || rect.height < window.innerHeight * 0.9) return;
+          const style = getComputedStyle(el);
+          if (style.pointerEvents === 'none') return;
+          if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return;
+          blockers.push({ el, z: style.zIndex, pos: style.position });
+        });
+        if (blockers.length > 0) {
+          console.log('[WAW] Potential click blockers:', blockers.map(b => ({
+            tag: b.el.tagName,
+            id: b.el.id,
+            className: b.el.className,
+            zIndex: b.z,
+            position: b.pos
+          })));
+        }
+      };
+      setTimeout(scanClickBlockers, 200);
+      setTimeout(scanClickBlockers, 600);
       
       // Aggressive scroll restoration function
       const forceEnableScroll = () => {
@@ -547,12 +762,14 @@
         document.body.style.right = '';
         document.body.style.width = '';
         document.body.style.height = '';
+        document.body.style.pointerEvents = '';
         
         // Reset html/documentElement styles
         document.documentElement.style.overflow = '';
         document.documentElement.style.overflowX = '';
         document.documentElement.style.overflowY = '';
         document.documentElement.style.position = '';
+        document.documentElement.style.pointerEvents = '';
         
         // Remove any modal-related classes from body
         document.body.classList.remove('modal-open', 'overflow-hidden', 'waw-active', 'no-scroll');
@@ -594,7 +811,7 @@
       if (overlay) { overlay.remove(); overlay = null; }
       document.body.classList.remove('waw-active');
       isActive = false;
-      document.removeEventListener('keydown', keyHandler);
+      document.removeEventListener('keydown', keyHandler, true);
       
       // Aggressively reset scroll
       const resetScroll = () => {
@@ -616,13 +833,33 @@
     const keyHandler = (e) => {
       if (!isActive || e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
       console.log('[WAW] Key pressed:', e.key);
-      if (e.key === 'Escape') { e.preventDefault(); closeAll(); }
-      else if (e.key === 'ArrowLeft') { e.preventDefault(); nav(-1); }
-      else if (e.key === 'ArrowRight') { e.preventDefault(); nav(1); }
-      else if (e.key === 'ArrowUp') { 
-        e.preventDefault(); 
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        closeAll();
+      }
+      else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        nav(-1);
+      }
+      else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        nav(1);
+      }
+      else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
         // Trigger save to My Jobs Folder
         document.getElementById('waw-save')?.click();
+      }
+      else if (e.key === 's' || e.key === 'S' || e.key === 'w' || e.key === 'W') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (currentJobId && window.WAWNavigator?.toggleShortlistJob) {
+          window.WAWNavigator.toggleShortlistJob(currentJobId);
+        }
       }
     };
 
@@ -717,47 +954,9 @@
     };
     
     // Action buttons - trigger buttons in the CURRENT WaterlooWorks modal
-    document.getElementById('waw-save').onclick = async () => {
+    document.getElementById('waw-save').onclick = () => {
       console.log('[WAW] Save button clicked');
-      let selectedFolder = '';
-
-      try {
-        if (window.AzureStorage?.getSettings) {
-          const settings = await window.AzureStorage.getSettings(['shortlistFolderName']);
-          if (settings?.shortlistFolderName) {
-            selectedFolder = settings.shortlistFolderName;
-          }
-        }
-      } catch (e) {
-        // Ignore storage errors
-      }
-
-      if (!selectedFolder) {
-        window.WAWNavigator?.notify?.('Select or create a shortlist folder in the extension popup', 'info');
-        return;
-      }
-
-      if (!window.WAWFolderManager?.getFolders || !window.WAWFolderManager?.selectFolder) {
-        window.WAWNavigator?.notify?.('Folder picker unavailable. Refresh the page and try again.', 'error');
-        return;
-      }
-
-      const folders = await window.WAWFolderManager.getFolders({ forceOpen: true });
-      const folderExists = Array.isArray(folders) && folders.some((name) => {
-        return (name || '').trim().toLowerCase() === selectedFolder.trim().toLowerCase();
-      });
-
-      if (!folderExists) {
-        window.WAWNavigator?.notify?.('Select a shortlist folder in the extension popup', 'info');
-        return;
-      }
-
-      const result = await window.WAWFolderManager.selectFolder(selectedFolder, currentJobId);
-      if (!result?.success) {
-        window.WAWNavigator?.notify?.('Could not select folder. Open a posting and try again.', 'error');
-        return;
-      }
-
+      clickCurrentModalButton('create_new_folder');
       // Mark job as saved and update badge
       if (currentJobId) {
         markJobAsSaved(currentJobId);
@@ -774,7 +973,7 @@
       clickCurrentModalButton('print');
     };
 
-    document.addEventListener('keydown', keyHandler);
+    document.addEventListener('keydown', keyHandler, true);
   }
 
   // ============================================
@@ -812,6 +1011,8 @@
         // Get basic data (header/sidebar)
         const basicData = parseBasicJobData(modal);
         const jobId = basicData.jobId;
+        if (jobId) lastClickedJobId = jobId;
+        syncJobIndexFromId(jobId);
         
         // Check cache first
         if (jobId && cache.has(jobId)) {
@@ -837,6 +1038,8 @@
       }
     };
     setTimeout(check, 100);
+    // Once we start handling, this navigation cycle is complete
+    isNavigating = false;
   }
   
   // Update existing overlay content without recreating it
@@ -888,10 +1091,11 @@
     }
   }
 
-  // Observer - watch for new modals AND content changes in existing modals
+  // Observer - watch for new modals (content changes only when navigating)
   let lastModalContent = '';
   
   new MutationObserver(muts => {
+    if (suppressObserver) return;
     for (const m of muts) {
       // Check for new nodes
       for (const node of m.addedNodes) {
@@ -899,15 +1103,20 @@
         const modal = node.querySelector?.('.modal__content') || (node.classList?.contains('modal__content') ? node : null);
         if (modal) {
           console.log('[WAW] New modal detected, isActive:', isActive);
-          if (!isActive) handleModal(modal);
+          if (!isActive && Date.now() >= suppressHandleUntil && modal.dataset?.wawSuppress !== 'true') {
+            handleModal(modal);
+          }
         }
       }
     }
     
-    // Also check if an existing modal has new content (for navigation)
-    if (!isActive) {
+    // Also check if an existing modal has new content (user click or navigation)
+    if (!isActive && Date.now() < navigationIntentUntil) {
       const modal = document.querySelector('.modal__content.height--100, div[data-v-70e7ded6-s] .modal__content');
       if (modal) {
+        if (Date.now() < suppressHandleUntil || modal.dataset?.wawSuppress === 'true') {
+          return;
+        }
         const title = modal.querySelector('.dashboard-header__posting-title h2, h2.h3')?.textContent || '';
         if (title && title !== lastModalContent) {
           console.log('[WAW] Modal content changed, title:', title.substring(0, 30));
@@ -917,6 +1126,14 @@
       }
     }
   }).observe(document.body, { childList: true, subtree: true, characterData: true });
+
+  document.addEventListener('click', (event) => {
+    const link = event.target?.closest?.('a');
+    if (!link) return;
+    const row = link.closest('tr');
+    if (!row) return;
+    navigationIntentUntil = Date.now() + 1200;
+  }, true);
 
   const existing = document.querySelector('.modal__content.height--100');
   if (existing) handleModal(existing);

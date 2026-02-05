@@ -43,6 +43,7 @@ const elements = {
   highlightNew: document.getElementById('highlight-new'),
   shortlistFolder: document.getElementById('shortlist-folder'),
   shortlistFolderList: document.getElementById('shortlist-folder-list'),
+  shortlistFolderApply: document.getElementById('shortlist-folder-apply'),
   openNewTab: document.getElementById('open-new-tab'),
   batchOperations: document.getElementById('batch-operations'),
   newJobDays: document.getElementById('new-job-days'),
@@ -133,6 +134,17 @@ async function saveSetting(key, value) {
   }
 }
 
+async function applyShortlistFolder(value, { force = false } = {}) {
+  const normalized = value.trim() || DefaultSettings.shortlistFolderName;
+  if (elements.shortlistFolder) {
+    elements.shortlistFolder.value = normalized;
+  }
+  await saveSetting('shortlistFolderName', normalized);
+  if (force) {
+    await saveSetting('shortlistFolderReselect', Date.now());
+  }
+}
+
 /**
  * Update dark mode schedule visibility
  */
@@ -211,9 +223,16 @@ function initEventListeners() {
   });
 
   elements.shortlistFolder?.addEventListener('blur', (e) => {
-    const value = e.target.value.trim() || DefaultSettings.shortlistFolderName;
-    e.target.value = value;
-    saveSetting('shortlistFolderName', value);
+    applyShortlistFolder(e.target.value, { force: false });
+  });
+
+  elements.shortlistFolder?.addEventListener('change', (e) => {
+    applyShortlistFolder(e.target.value, { force: false });
+  });
+
+  elements.shortlistFolderApply?.addEventListener('click', () => {
+    if (!elements.shortlistFolder) return;
+    applyShortlistFolder(elements.shortlistFolder.value, { force: true });
   });
 
   elements.openNewTab.addEventListener('change', (e) => {

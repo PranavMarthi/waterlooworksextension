@@ -163,92 +163,55 @@ body {
 
 /* Shortlist section */
 .shortlist-section {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border-color);
+  padding-top: 12px;
   margin-bottom: 16px;
+  border-top: 1px solid var(--border-color);
 }
 
-.shortlist-section span {
-  font-weight: 500;
-}
-
-.shortlist-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.shortlist-refresh {
-  padding: 4px 8px;
-  font-size: 11px;
+.shortlist-label {
+  font-size: 12px;
   font-weight: 600;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background-color: var(--bg-secondary);
-  cursor: pointer;
-}
-
-.shortlist-refresh:hover {
-  background-color: var(--bg-tertiary);
-  border-color: var(--primary);
-}
-
-.shortlist-section select {
-  width: 100%;
-  padding: 6px 8px;
-  font-size: 13px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background-color: var(--bg-primary);
-}
-
-.shortlist-section select:focus {
-  outline: none;
-  border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(69, 182, 247, 0.2);
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .shortlist-controls {
   display: flex;
-  gap: 6px;
+  align-items: center;
+  gap: 8px;
 }
 
-.shortlist-controls input[type="text"] {
+.shortlist-input {
   flex: 1;
-  padding: 6px 8px;
-  font-size: 13px;
+  padding: 8px 10px;
   border: 1px solid var(--border-color);
   border-radius: 6px;
+  font-size: 13px;
 }
 
-.shortlist-controls input[type="text"]:focus {
+.shortlist-input:focus {
   outline: none;
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(69, 182, 247, 0.2);
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
 }
 
-.shortlist-save {
-  padding: 6px 10px;
+.shortlist-apply {
+  padding: 8px 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  border-radius: 6px;
   font-size: 12px;
   font-weight: 600;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background-color: var(--bg-secondary);
   cursor: pointer;
+  transition: all 0.2s;
 }
 
-.shortlist-save:hover {
-  background-color: var(--bg-tertiary);
+.shortlist-apply:hover {
   border-color: var(--primary);
-}
-
-.shortlist-status {
-  font-size: 11px;
-  color: var(--text-secondary);
-  min-height: 14px;
+  color: var(--primary);
+  background: var(--bg-tertiary);
 }
 
 /* Theme section */
