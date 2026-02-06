@@ -31,6 +31,39 @@
     shortlistFolderName: ''
   };
 
+  const BOARD_CONTEXT = (() => {
+    const path = (window.location.pathname || '').toLowerCase();
+    if (path.includes('/co-op/direct/')) return 'direct';
+    if (path.includes('/co-op/full/')) return 'full';
+    return 'shared';
+  })();
+
+  const SHORTLIST_STORAGE_KEYS = {
+    folderName: BOARD_CONTEXT === 'direct'
+      ? 'shortlistFolderNameDirect'
+      : BOARD_CONTEXT === 'full'
+        ? 'shortlistFolderNameFull'
+        : 'shortlistFolderName',
+    folders: BOARD_CONTEXT === 'direct'
+      ? 'shortlistFoldersDirect'
+      : BOARD_CONTEXT === 'full'
+        ? 'shortlistFoldersFull'
+        : 'shortlistFolders',
+    selectionRequired: BOARD_CONTEXT === 'direct'
+      ? 'shortlistFolderSelectionRequiredDirect'
+      : BOARD_CONTEXT === 'full'
+        ? 'shortlistFolderSelectionRequiredFull'
+        : 'shortlistFolderSelectionRequired',
+    reselect: BOARD_CONTEXT === 'direct'
+      ? 'shortlistFolderReselectDirect'
+      : BOARD_CONTEXT === 'full'
+        ? 'shortlistFolderReselectFull'
+        : 'shortlistFolderReselect'
+  };
+
+  const IS_APPLICATIONS_PAGE = /\/applications\.htm/i.test(window.location.pathname || '');
+  const IS_JOBS_PAGE = /\/jobs\.htm/i.test(window.location.pathname || '');
+
   const FOLDER_MENU_SELECTORS = [
     '[role="menu"]',
     '[role="listbox"]',
@@ -329,7 +362,7 @@
 
   async function setFolderSelectionRequired(required) {
     try {
-      await chrome.storage.sync.set({ shortlistFolderSelectionRequired: !!required });
+      await chrome.storage.sync.set({ [SHORTLIST_STORAGE_KEYS.selectionRequired]: !!required });
     } catch (_) {
       // no-op
     }
@@ -389,41 +422,19 @@
   function safeClick(element) {
     if (!element) return false;
     const tag = element.tagName ? element.tagName.toLowerCase() : '';
-    const isAnchor = tag === 'a';
-    const href = isAnchor ? element.getAttribute('href') || '' : '';
-    const isJavascriptHref = isAnchor && href.trim().toLowerCase().startsWith('javascript:');
-    let restoreHref = null;
-
-    if (isJavascriptHref) {
-      restoreHref = href;
-      element.setAttribute('href', '#');
-      element.addEventListener('click', (event) => event.preventDefault(), { capture: true, once: true });
+    if (tag === 'a') {
+      const href = (element.getAttribute('href') || '').trim().toLowerCase();
+      if (href.startsWith('javascript:')) {
+        element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+        return true;
+      }
     }
-
     element.click();
-
-    if (restoreHref !== null) {
-      element.setAttribute('href', restoreHref);
-    }
-
     return true;
   }
 
   function sanitizeJavascriptLink(link) {
-    if (!link || link.tagName?.toLowerCase() !== 'a') return;
-    const href = link.getAttribute('href') || '';
-    if (href.trim().toLowerCase().startsWith('javascript:')) {
-      if (!link.dataset.wawOriginalHref) {
-        link.dataset.wawOriginalHref = href;
-      }
-      link.setAttribute('href', '#');
-      if (!link.dataset.wawJsSanitized) {
-        link.addEventListener('click', (event) => {
-          event.preventDefault();
-        }, true);
-        link.dataset.wawJsSanitized = 'true';
-      }
-    }
+    return link;
   }
 
   function sanitizeAllJavascriptLinks() {
@@ -435,8 +446,8 @@
   async function getStoredFolders() {
     try {
       if (window.AzureStorage?.getSettings) {
-        const settings = await window.AzureStorage.getSettings(['shortlistFolders']);
-        return uniqueList(Array.isArray(settings.shortlistFolders) ? settings.shortlistFolders : [])
+        const loaded = await window.AzureStorage.getSettings([SHORTLIST_STORAGE_KEYS.folders]);
+        return uniqueList(Array.isArray(loaded[SHORTLIST_STORAGE_KEYS.folders]) ? loaded[SHORTLIST_STORAGE_KEYS.folders] : [])
           .filter((name) => !isExcludedFolderName(name));
       }
     } catch (e) {
@@ -444,8 +455,8 @@
     }
 
     try {
-      const result = await chrome.storage.sync.get({ shortlistFolders: [] });
-      return uniqueList(Array.isArray(result.shortlistFolders) ? result.shortlistFolders : [])
+      const result = await chrome.storage.sync.get({ [SHORTLIST_STORAGE_KEYS.folders]: [] });
+      return uniqueList(Array.isArray(result[SHORTLIST_STORAGE_KEYS.folders]) ? result[SHORTLIST_STORAGE_KEYS.folders] : [])
         .filter((name) => !isExcludedFolderName(name));
     } catch (e) {
       return [];
@@ -461,10 +472,10 @@
   async function saveFolderList(list) {
     const folders = uniqueList(list).filter((name) => !isExcludedFolderName(name));
     if (window.AzureStorage?.saveSettings) {
-      await window.AzureStorage.saveSettings({ shortlistFolders: folders });
+      await window.AzureStorage.saveSettings({ [SHORTLIST_STORAGE_KEYS.folders]: folders });
       return;
     }
-    await chrome.storage.sync.set({ shortlistFolders: folders });
+    await chrome.storage.sync.set({ [SHORTLIST_STORAGE_KEYS.folders]: folders });
   }
 
   function getVisibleFolderMenus() {
@@ -651,9 +662,10 @@
   function findCreateFolderMenuItem() {
     const menus = getVisibleFolderMenus();
     for (const menu of menus) {
-      const items = findFolderMenuItems(menu);
+      const items = Array.from(menu.querySelectorAll('li, button, a, [role="menuitem"], [role="option"], label, div, span'));
       for (const item of items) {
-        if (isCreateFolderItem(getFolderItemName(item))) return item;
+        const name = getFolderItemName(item);
+        if (isCreateFolderItem(name)) return item;
       }
     }
     const candidates = Array.from(document.querySelectorAll('label, button, a, li, div, span'));
@@ -956,11 +968,11 @@
       if (window.AzureStorage) {
         const loaded = await window.AzureStorage.getSettings([
           'newJobDaysThreshold',
-          'shortlistFolderName'
+          SHORTLIST_STORAGE_KEYS.folderName
         ]);
         settings = {
           newJobDaysThreshold: loaded.newJobDaysThreshold || DEFAULT_SETTINGS.newJobDaysThreshold,
-          shortlistFolderName: cleanFolderName(loaded.shortlistFolderName || DEFAULT_SETTINGS.shortlistFolderName)
+          shortlistFolderName: cleanFolderName(loaded[SHORTLIST_STORAGE_KEYS.folderName] || DEFAULT_SETTINGS.shortlistFolderName)
         };
       } else {
         settings = DEFAULT_SETTINGS;
@@ -994,10 +1006,10 @@
     settings = settings || {};
     settings.shortlistFolderName = value;
     if (window.AzureStorage?.saveSettings) {
-      await window.AzureStorage.saveSettings({ shortlistFolderName: value });
+      await window.AzureStorage.saveSettings({ [SHORTLIST_STORAGE_KEYS.folderName]: value });
       return;
     }
-    await chrome.storage.sync.set({ shortlistFolderName: value });
+    await chrome.storage.sync.set({ [SHORTLIST_STORAGE_KEYS.folderName]: value });
   }
 
   function removeDefaultFolderPrompt() {
@@ -1052,6 +1064,7 @@
   }
 
   async function showDefaultFolderPrompt({ folders = [], reason = '', autoRefresh = false, jobId = null } = {}) {
+    if (IS_APPLICATIONS_PAGE) return;
     if (!isModalOpen()) return;
 
     removeDefaultFolderPrompt();
@@ -1166,6 +1179,9 @@
   }
 
   async function ensureDefaultShortlistFolderSelected({ reason = '', forcePrompt = false, jobId = null } = {}) {
+    if (IS_APPLICATIONS_PAGE) {
+      return !!cleanFolderName(settings?.shortlistFolderName || '');
+    }
     if (!isModalOpen()) return false;
 
     const selectedFolder = cleanFolderName(settings?.shortlistFolderName || '');
@@ -1221,6 +1237,9 @@
 
     const links = [];
     rows.forEach((row) => {
+      const rowText = normalizeText(row.textContent).toLowerCase();
+      if (rowText.includes('cancelled') || rowText.includes('canceled')) return;
+
       let selected = null;
       for (const selector of rowLinkSelectors) {
         const candidate = row.querySelector(selector);
@@ -1427,6 +1446,10 @@
     const folderName = cleanFolderName(settings?.shortlistFolderName || '');
 
     if (!folderName) {
+      if (IS_APPLICATIONS_PAGE) {
+        showNotification('Select a shortlist folder by opening a posting in jobs.htm first.', 'info');
+        return false;
+      }
       await promptFolderSelection(jobId, 'Choose a default shortlist folder before shortlisting.');
       return false;
     }
@@ -1443,11 +1466,19 @@
     }
 
     if (!folders || folders.length === 0) {
+      if (IS_APPLICATIONS_PAGE) {
+        showNotification('Select a shortlist folder by opening a posting in jobs.htm first.', 'info');
+        return false;
+      }
       await promptFolderSelection(jobId, 'No valid folders found. Refresh and choose a default shortlist folder.');
       return false;
     }
 
     if (!folderListContains(folders, folderName)) {
+      if (IS_APPLICATIONS_PAGE) {
+        showNotification('Select a shortlist folder by opening a posting in jobs.htm first.', 'info');
+        return false;
+      }
       await promptFolderSelection(jobId, 'Your default folder is unavailable. Choose a new default shortlist folder.');
       return false;
     }
@@ -1455,6 +1486,10 @@
     const result = await FolderManager.setFolderState(folderName, { jobId, desiredState: true });
     if (!result?.success) {
       console.log(`[WAW] Could not select folder ${folderName}: ${result?.message || 'unknown error'}`);
+      if (IS_APPLICATIONS_PAGE) {
+        showNotification('Select a shortlist folder by opening a posting in jobs.htm first.', 'info');
+        return false;
+      }
       await promptFolderSelection(jobId, 'Could not use your current default folder. Choose another folder.');
       return false;
     }
@@ -1466,6 +1501,10 @@
   async function removeFromWaterlooWorksFolder(jobId) {
     const folderName = cleanFolderName(settings?.shortlistFolderName || '');
     if (!folderName) {
+      if (IS_APPLICATIONS_PAGE) {
+        showNotification('Select a shortlist folder by opening a posting in jobs.htm first.', 'info');
+        return false;
+      }
       await ensureDefaultShortlistFolderSelected({
         reason: 'Choose a default shortlist folder.',
         forcePrompt: true,
@@ -1481,6 +1520,10 @@
 
     const result = await FolderManager.setFolderState(folderName, { jobId, desiredState: false });
     if (!result?.success) {
+      if (IS_APPLICATIONS_PAGE) {
+        showNotification('Select a shortlist folder by opening a posting in jobs.htm first.', 'info');
+        return false;
+      }
       await ensureDefaultShortlistFolderSelected({
         reason: 'Could not access the current shortlist folder. Choose a new default folder.',
         forcePrompt: true,
@@ -1656,10 +1699,8 @@
     console.log('[WAW] delta:', delta);
     console.log('[WAW] currentJobIndex (before):', currentJobIndex);
     
-    // Refresh job links if needed
-    if (jobLinks.length === 0) {
-      getAllJobLinks();
-    }
+    // Always refresh job links first to avoid stale index drift.
+    getAllJobLinks();
     console.log('[WAW] jobLinks.length:', jobLinks.length);
 
     // If still no job links, can't navigate
@@ -1686,10 +1727,34 @@
       
       if (foundIndex >= 0) {
         currentJobIndex = foundIndex;
-      } else if (currentJobIndex < 0) {
-        // Fallback: couldn't find job and no previous index
-        currentJobIndex = delta > 0 ? 0 : jobLinks.length - 1;
-        console.log(`[WAW] Could not find job in list, starting at index ${currentJobIndex}`);
+      } else {
+        let recovered = false;
+        if (lastClickedJobId) {
+          const clickedIdx = jobLinks.findIndex((link) => {
+            const row = link.closest('tr');
+            return row && String(getJobIdFromRow(row)) === String(lastClickedJobId);
+          });
+          if (clickedIdx >= 0) {
+            currentJobIndex = clickedIdx;
+            recovered = true;
+            console.log('[WAW] Using last clicked job fallback:', currentJobIndex);
+          }
+        }
+
+        if (!recovered) {
+          const selectedRow = document.querySelector('tr.waw-selected, tr[aria-selected="true"], tr.table__row--selected');
+          const selectedIndex = Number(selectedRow?.dataset?.wawIndex);
+          if (Number.isFinite(selectedIndex)) {
+            currentJobIndex = selectedIndex;
+            recovered = true;
+            console.log('[WAW] Using selected row index fallback:', currentJobIndex);
+          }
+        }
+
+        if (!recovered && currentJobIndex < 0) {
+          currentJobIndex = delta > 0 ? 0 : jobLinks.length - 1;
+          console.log(`[WAW] Could not find job in list, starting at index ${currentJobIndex}`);
+        }
       }
       // If foundIndex is -1 but currentJobIndex >= 0, keep the existing index
     } else if (currentJobIndex < 0) {
@@ -1772,9 +1837,7 @@
   }
 
   function syncCurrentIndexFromModal() {
-    if (jobLinks.length === 0) {
-      getAllJobLinks();
-    }
+    getAllJobLinks();
     const modalJobId = getCurrentModalJobId();
     if (!modalJobId) return;
     for (let i = 0; i < jobLinks.length; i++) {
@@ -1784,6 +1847,27 @@
         return;
       }
     }
+  }
+
+  function setCurrentJobContext({ index = null, jobId = null } = {}) {
+    getAllJobLinks();
+
+    if (Number.isFinite(index) && index >= 0 && index < jobLinks.length) {
+      currentJobIndex = index;
+      return true;
+    }
+
+    if (jobId) {
+      for (let i = 0; i < jobLinks.length; i++) {
+        const row = jobLinks[i].closest('tr');
+        if (row && String(getJobIdFromRow(row)) === String(jobId)) {
+          currentJobIndex = i;
+          return true;
+        }
+      }
+    }
+
+    return false;
   }
 
   function closeModal() {
@@ -2041,11 +2125,13 @@
               setTimeout(() => {
                 addModalNavigationUI();
                 syncCurrentIndexFromModal();
-                ensureDefaultShortlistFolderSelected({
-                  reason: 'Choose a default shortlist folder to start shortlisting.',
-                  forcePrompt: false,
-                  jobId: getCurrentModalJobId()
-                }).catch(() => {});
+                if (IS_JOBS_PAGE) {
+                  ensureDefaultShortlistFolderSelected({
+                    reason: 'Choose a default shortlist folder to start shortlisting.',
+                    forcePrompt: false,
+                    jobId: getCurrentModalJobId()
+                  }).catch(() => {});
+                }
               }, 300);
             }
           }
@@ -2175,32 +2261,22 @@
     setupModalObserver();
     setupKeyboardNav();
     setupFolderObserver();
-    setupLinkSanitizer();
-
-    document.addEventListener('click', (event) => {
-      const anchor = event.target?.closest?.('a');
-      if (!anchor) return;
-      const href = anchor.getAttribute('href') || '';
-      if (href.trim().toLowerCase().startsWith('javascript:')) {
-        event.preventDefault();
-      }
-    }, true);
 
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area !== 'sync') return;
-      if (changes.shortlistFolderName) {
+      if (changes[SHORTLIST_STORAGE_KEYS.folderName]) {
         settings = settings || {};
-        settings.shortlistFolderName = cleanFolderName(changes.shortlistFolderName.newValue);
+        settings.shortlistFolderName = cleanFolderName(changes[SHORTLIST_STORAGE_KEYS.folderName].newValue);
         if (settings.shortlistFolderName) {
           removeDefaultFolderPrompt();
           setFolderSelectionRequired(false).catch(() => {});
         }
       }
-      if (changes.shortlistFolderReselect) {
-        chrome.storage.sync.get({ shortlistFolderName: DEFAULT_SETTINGS.shortlistFolderName })
+      if (changes[SHORTLIST_STORAGE_KEYS.reselect]) {
+        chrome.storage.sync.get({ [SHORTLIST_STORAGE_KEYS.folderName]: DEFAULT_SETTINGS.shortlistFolderName })
           .then((result) => {
             settings = settings || {};
-            settings.shortlistFolderName = cleanFolderName(result.shortlistFolderName || DEFAULT_SETTINGS.shortlistFolderName);
+            settings.shortlistFolderName = cleanFolderName(result[SHORTLIST_STORAGE_KEYS.folderName] || DEFAULT_SETTINGS.shortlistFolderName);
           })
           .catch(() => {});
       }
@@ -2227,6 +2303,7 @@
     navigateJob,
     toggleShortlistJob,
     getCurrentModalJobId,
+    setCurrentJobContext,
     isModalOpen,
     shortlistedJobs,
     notify: showNotification
@@ -2237,12 +2314,24 @@
     if (!request?.action) return;
 
     if (request.action === 'getShortlistFolders') {
+      if (IS_APPLICATIONS_PAGE) {
+        sendResponse({
+          folders: [],
+          selectedFolder: cleanFolderName(settings?.shortlistFolderName || DEFAULT_SETTINGS.shortlistFolderName),
+          context: BOARD_CONTEXT,
+          requiresModal: true,
+          message: 'Shortlist folders can only be managed from jobs.htm pages'
+        });
+        return true;
+      }
+
       if (!isModalOpen()) {
         getStoredFolders()
           .then((folders) => {
             sendResponse({
               folders: uniqueList(folders || []),
               selectedFolder: cleanFolderName(settings?.shortlistFolderName || DEFAULT_SETTINGS.shortlistFolderName),
+              context: BOARD_CONTEXT,
               requiresModal: true,
               message: 'Open a posting to select a folder'
             });
@@ -2261,6 +2350,7 @@
           sendResponse({
             folders,
             selectedFolder: cleanFolderName(settings?.shortlistFolderName || DEFAULT_SETTINGS.shortlistFolderName),
+            context: BOARD_CONTEXT,
             requiresModal: false,
             message: folders.length > 0 ? 'Folders found' : 'No folders found'
           });
@@ -2276,7 +2366,7 @@
       if (name) {
         settings = settings || {};
         settings.shortlistFolderName = name;
-        window.AzureStorage?.saveSettings({ shortlistFolderName: name });
+        window.AzureStorage?.saveSettings({ [SHORTLIST_STORAGE_KEYS.folderName]: name });
         setFolderSelectionRequired(false);
       }
       sendResponse({ success: true });
@@ -2290,7 +2380,7 @@
           if (result?.success && name) {
             settings = settings || {};
             settings.shortlistFolderName = name;
-            await window.AzureStorage?.saveSettings({ shortlistFolderName: name });
+            await window.AzureStorage?.saveSettings({ [SHORTLIST_STORAGE_KEYS.folderName]: name });
             await setFolderSelectionRequired(false);
           }
           sendResponse({

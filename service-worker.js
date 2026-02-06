@@ -13,6 +13,12 @@ const INSTALL_DEFAULTS = {
   shortlistFolderName: '',
   shortlistFolders: [],
   shortlistFolderSelectionRequired: true,
+  shortlistFolderNameDirect: '',
+  shortlistFoldersDirect: [],
+  shortlistFolderSelectionRequiredDirect: true,
+  shortlistFolderNameFull: '',
+  shortlistFoldersFull: [],
+  shortlistFolderSelectionRequiredFull: true,
   jobRearrangerEnabled: true,
   jobRearrangerPriorityKeys: ['duration', 'location', 'compensation', 'deadline', 'method'],
   jobRearrangerStandardOrder: ['job_description', 'responsibilities', 'required_skills', 'targeted_degrees']

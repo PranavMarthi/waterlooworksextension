@@ -32,7 +32,9 @@
     {
       "matches": [
         "https://waterlooworks.uwaterloo.ca/myAccount/co-op/direct/jobs.htm*",
-        "https://waterlooworks.uwaterloo.ca/myAccount/co-op/full/jobs.htm*"
+        "https://waterlooworks.uwaterloo.ca/myAccount/co-op/full/jobs.htm*",
+        "https://waterlooworks.uwaterloo.ca/myAccount/co-op/direct/applications.htm*",
+        "https://waterlooworks.uwaterloo.ca/myAccount/co-op/full/applications.htm*"
       ],
       "css": [
         "ui/layout/modal-hide.css"
@@ -42,7 +44,9 @@
     {
       "matches": [
         "https://waterlooworks.uwaterloo.ca/myAccount/co-op/direct/jobs.htm*",
-        "https://waterlooworks.uwaterloo.ca/myAccount/co-op/full/jobs.htm*"
+        "https://waterlooworks.uwaterloo.ca/myAccount/co-op/full/jobs.htm*",
+        "https://waterlooworks.uwaterloo.ca/myAccount/co-op/direct/applications.htm*",
+        "https://waterlooworks.uwaterloo.ca/myAccount/co-op/full/applications.htm*"
       ],
       "js": [
         "utils/storage.js",

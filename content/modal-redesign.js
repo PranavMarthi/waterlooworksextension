@@ -33,6 +33,18 @@
   let suppressHandleUntil = 0;
   let suppressObserver = false;
   let navigationIntentUntil = 0;
+  const isApplicationsPage = /\/applications\.htm/i.test(window.location.pathname);
+
+  function isPostingModalNode(node) {
+    if (!node || node.nodeType !== 1) return false;
+    if (node.id === 'waw-overlay' || node.closest?.('#waw-overlay')) return false;
+
+    const hasPostingHeader = !!node.querySelector?.('.dashboard-header__posting-title h2, h2.h3, .dashboard-header--mini__content');
+    const hasPostingFields = (node.querySelectorAll?.('.tag__key-value-list').length || 0) > 3;
+    const hasPostingActions = !!node.querySelector?.('nav.floating--action-bar, button[aria-label="Close"]');
+
+    return hasPostingHeader || hasPostingFields || hasPostingActions;
+  }
 
   // ============================================
   // AGGRESSIVE: Hide modal instantly via inline styles
@@ -40,7 +52,7 @@
   // ============================================
   
   function hideOriginalModal(el) {
-    if (!el || el.id === 'waw-overlay') return;
+    if (!isPostingModalNode(el)) return;
     el.style.cssText = 'position:fixed!important;top:-9999px!important;left:-9999px!important;visibility:hidden!important;opacity:0!important;pointer-events:auto!important;';
   }
 
@@ -50,7 +62,7 @@
       for (const node of mut.addedNodes) {
         if (node.nodeType !== 1) continue;
         // Check if it's the WW modal or contains it
-        if (node.matches?.('div[data-v-70e7ded6-s], .modal__content, .modal__overlay, [role="dialog"]')) {
+        if (node.matches?.('div[data-v-70e7ded6-s], .modal__content, .modal__overlay, [role="dialog"]') && isPostingModalNode(node)) {
           hideOriginalModal(node);
         }
         // Also check children
@@ -99,6 +111,22 @@
     return true;
   }
 
+  function isCancelledRow(row) {
+    const text = (row?.textContent || '').toLowerCase();
+    return text.includes('cancelled') || text.includes('canceled');
+  }
+
+  function syncNavigatorContext(index, row) {
+    const idx = Number(index);
+    const jid = getJobIdFromRow(row);
+    if (window.WAWNavigator?.setCurrentJobContext) {
+      window.WAWNavigator.setCurrentJobContext({
+        index: Number.isFinite(idx) ? idx : null,
+        jobId: jid || null
+      });
+    }
+  }
+
   function findPostingLinkInRow(row) {
     if (!row) return null;
 
@@ -130,13 +158,17 @@
     const links = [];
 
     rows.forEach((row) => {
+      if (isCancelledRow(row)) return;
       const link = findPostingLinkInRow(row);
       if (link) links.push(link);
     });
 
     jobLinks = Array.from(new Set(links));
     if (jobLinks.length === 0) {
-      jobLinks = Array.from(document.querySelectorAll('tbody a')).filter(isLikelyPostingLink);
+      jobLinks = Array.from(document.querySelectorAll('tbody a')).filter((link) => {
+        if (!isLikelyPostingLink(link)) return false;
+        return !isCancelledRow(link.closest('tr'));
+      });
     }
 
     jobLinks.forEach((link, index) => {
@@ -149,6 +181,7 @@
             if (Number.isFinite(idx)) currentJobIndex = idx;
             const jid = getJobIdFromRow(row);
             if (jid) lastClickedJobId = jid;
+            syncNavigatorContext(idx, row);
           });
           row.dataset.wawModalClickBound = 'true';
         }
@@ -159,6 +192,7 @@
           const jid = getJobIdFromRow(row);
           if (jid) lastClickedJobId = jid;
           navigationIntentUntil = Date.now() + 1200;
+          syncNavigatorContext(index, row);
         });
         link.dataset.wawModalClickBound = 'true';
       }
@@ -192,23 +226,7 @@
 
   function safeClick(element) {
     if (!element) return false;
-    const tag = element.tagName ? element.tagName.toLowerCase() : '';
-    const isAnchor = tag === 'a';
-    const href = isAnchor ? element.getAttribute('href') || '' : '';
-    const isJavascriptHref = isAnchor && href.trim().toLowerCase().startsWith('javascript:');
-    let restoreHref = null;
-
-    if (isJavascriptHref) {
-      restoreHref = href;
-      element.setAttribute('href', '#');
-      element.addEventListener('click', (event) => event.preventDefault(), { capture: true, once: true });
-    }
-
     element.click();
-
-    if (restoreHref !== null) {
-      element.setAttribute('href', restoreHref);
-    }
     return true;
   }
 
@@ -230,11 +248,13 @@
     if (!link) return;
     const row = link.closest('tr');
     if (!row) return;
+    if (isCancelledRow(row)) return;
     if (jobLinks.length === 0) refreshJobLinks();
     const idx = Number(row.dataset.wawModalIndex);
     if (Number.isFinite(idx)) currentJobIndex = idx;
     const jid = getJobIdFromRow(row);
     if (jid) lastClickedJobId = jid;
+    syncNavigatorContext(idx, row);
   }, true);
 
   function findCurrentJobIndex() {
@@ -286,8 +306,8 @@
     isNavigating = true;
     navigationIntentUntil = Date.now() + 1200;
 
-    // Prefer navigator.js pagination-aware navigation to avoid page-wrap regressions.
-    if (window.WAWNavigator?.navigateJob) {
+    // Use navigator.js on jobs pages; applications use local flow to avoid blank/invisible modal regressions.
+    if (window.WAWNavigator?.navigateJob && !isApplicationsPage) {
       window.WAWNavigator.navigateJob(direction);
       isNavigating = false;
       return;
@@ -391,6 +411,10 @@
 
   function parseContentSections(modal) {
     const data = { description: '', responsibilities: '', skills: '' };
+    const fieldMap = new Map();
+    parseAllListingFields(modal).forEach((field) => {
+      fieldMap.set(field.label.toLowerCase(), field.value);
+    });
     
     // Get the full text content of the modal
     const fullText = modal.innerText || modal.textContent || '';
@@ -427,17 +451,16 @@
       
       let content = fullText.substring(contentStart, nextHeaderIndex).trim();
       
-      // Clean up the content
-      content = content.replace(/\n\s*\n\s*\n/g, '\n\n'); // Remove excessive newlines
-      content = content.replace(/^\s+/gm, ''); // Remove leading whitespace from lines
+      // Keep structure while removing only excessive blank lines
+      content = content.replace(/\n\s*\n\s*\n/g, '\n\n');
       
       return content;
     }
     
-    // Extract our target sections
-    data.description = extractSection('Job Summary:');
-    data.responsibilities = extractSection('Job Responsibilities:');
-    data.skills = extractSection('Required Skills:');
+    // Prefer structured field extraction (preserves list markers), fallback to text slicing.
+    data.description = fieldMap.get('job summary') || extractSection('Job Summary:');
+    data.responsibilities = fieldMap.get('job responsibilities') || extractSection('Job Responsibilities:');
+    data.skills = fieldMap.get('required skills') || extractSection('Required Skills:');
     
     console.log('[WAW] Parsed description:', data.description.substring(0, 100) + '...');
     console.log('[WAW] Parsed responsibilities:', data.responsibilities.substring(0, 100) + '...');
@@ -530,6 +553,52 @@
     return data;
   }
 
+  function parseAllListingFields(modal) {
+    const fields = [];
+
+    function valueFromKeyValueNode(kv) {
+      const clone = kv.cloneNode(true);
+      clone.querySelectorAll('.label, span.label').forEach((el) => el.remove());
+
+      clone.querySelectorAll('ul').forEach((ul) => {
+        Array.from(ul.querySelectorAll(':scope > li')).forEach((li) => {
+          const text = (li.innerText || li.textContent || '').trim();
+          li.textContent = text ? `• ${text}` : '•';
+        });
+      });
+
+      clone.querySelectorAll('ol').forEach((ol) => {
+        Array.from(ol.querySelectorAll(':scope > li')).forEach((li, index) => {
+          const text = (li.innerText || li.textContent || '').trim();
+          li.textContent = text ? `${index + 1}. ${text}` : `${index + 1}.`;
+        });
+      });
+
+      let value = (clone.innerText || clone.textContent || '')
+        .replace(/\r/g, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+
+      if (!value) {
+        const p = kv.querySelector('p');
+        value = (p?.innerText || p?.textContent || '').trim();
+      }
+
+      return value || 'N/A';
+    }
+
+    modal.querySelectorAll('.tag__key-value-list').forEach((kv) => {
+      const labelEl = kv.querySelector('.label, span.label');
+      if (!labelEl) return;
+      const label = (labelEl.textContent || '').replace(/\s+/g, ' ').trim().replace(/:$/, '');
+      if (!label) return;
+
+      const value = valueFromKeyValueNode(kv);
+      fields.push({ label, value });
+    });
+    return fields;
+  }
+
   function esc(t) { return t ? t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }
   
   // Clean up filler/BS from job descriptions
@@ -557,10 +626,7 @@
       cleaned = cleaned.replace(pattern, '');
     });
     
-    // Remove redundant bullet markers
-    cleaned = cleaned.replace(/^[•\-\*]\s*/gm, '');
-    
-    // Remove empty lines and excessive whitespace
+    // Remove empty lines and excessive whitespace while preserving indentation and markers
     cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
     
     return cleaned;
@@ -569,16 +635,43 @@
   function fmt(t) {
     if (!t) return '';
     const cleaned = cleanContent(t);
-    const lines = cleaned.split(/\n+/)
-      .map(l => l.trim())
-      .map(l => l.replace(/^[•\-\*\u2022\u2023\u25E6\u2043\u2219]+\s*/g, '')) // Remove existing bullets
-      .filter(l => l && l.length > 2);
-    
-    // If only a few lines, show as paragraphs; otherwise as bullets
-    if (lines.length <= 2) {
-      return lines.map(l => `<p style="margin:0 0 8px">${esc(l)}</p>`).join('');
-    }
-    return lines.map(l => `<p style="margin:0 0 2px">• ${esc(l)}</p>`).join('');
+    const lines = cleaned.split(/\n/);
+    const rendered = [];
+
+    lines.forEach((line) => {
+      if (!line.trim()) {
+        rendered.push('<div style="height:8px"></div>');
+        return;
+      }
+      const normalized = line.replace(/\t/g, '  ');
+      const leadingSpacesMatch = normalized.match(/^\s*/);
+      const leadingSpaces = leadingSpacesMatch ? leadingSpacesMatch[0].length : 0;
+      const indentPx = Math.min(leadingSpaces * 6, 72);
+      const content = normalized.trimStart();
+      const isListItem = /^(?:[•\-\*\u2022\u2023\u25E6\u2043\u2219]|\d+[.)]|[a-zA-Z][.)])\s+/.test(content);
+      const marginBottom = isListItem ? 4 : 8;
+      rendered.push(`<p style="margin:0 0 ${marginBottom}px ${indentPx}px; white-space:pre-wrap;">${esc(content)}</p>`);
+    });
+
+    return rendered.join('');
+  }
+
+  function renderFullDetailsSection(allFields) {
+    if (!Array.isArray(allFields) || allFields.length === 0) return '';
+    const rows = allFields.map((field) => (
+      `<div class="waw-detail-row"><div class="waw-detail-label">${esc(field.label)}:</div><div class="waw-detail-value">${fmt(field.value)}</div></div>`
+    )).join('');
+    return `<div class="waw-section waw-full-details"><div class="waw-section-title">Full Listing Details (Verbatim)</div><div class="waw-section-content">${rows}</div></div>`;
+  }
+
+  function renderMainSections(data) {
+    let content = '';
+    if (data.description) content += `<div class="waw-section"><div class="waw-section-title">Description:</div><div class="waw-section-content">${fmt(data.description)}</div></div>`;
+    if (data.responsibilities) content += `<div class="waw-section"><div class="waw-section-title">Responsibilities:</div><div class="waw-section-content">${fmt(data.responsibilities)}</div></div>`;
+    if (data.skills) content += `<div class="waw-section"><div class="waw-section-title">Skills:</div><div class="waw-section-content">${fmt(data.skills)}</div></div>`;
+    if (!data.description && !data.responsibilities && !data.skills) content += '<div style="color:#718096;">No details found</div>';
+    content += renderFullDetailsSection(data.allFields);
+    return content;
   }
 
   // ============================================
@@ -631,6 +724,10 @@
           margin-bottom: 10px;
         }
         .waw-section-content { font-size: 15px; color: #334155; line-height: 1.8; }
+        .waw-full-details { margin-top: 34px; padding-top: 20px; border-top: 1px dashed rgba(15, 118, 110, 0.3); }
+        .waw-detail-row { margin-bottom: 14px; }
+        .waw-detail-label { font-size: 12px; font-weight: 700; color: #0f766e; margin-bottom: 4px; }
+        .waw-detail-value { font-size: 14px; color: #334155; }
         #waw-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; padding-top: 22px; border-top: 1px solid rgba(0,0,0,0.06); }
         #waw-actions { display: flex; gap: 10px; }
         .waw-action-btn {
@@ -648,7 +745,8 @@
           transition: background 0.15s ease, color 0.15s ease;
         }
         .waw-nav-btn:hover { background: #0d9488; color: #fff; }
-        .waw-nav-btn:first-child { border-right: 1px solid rgba(0,0,0,0.08); }
+        .waw-nav-btn + .waw-nav-btn { border-left: 1px solid rgba(0,0,0,0.08); }
+        #waw-star.is-shortlisted { color: #f39c12; font-size: 22px; }
         #waw-sidebar { width: 270px; padding: 36px 24px; background: #e8eef4; flex-shrink: 0; border-left: 1px solid rgba(0,0,0,0.05); }
         .waw-info { margin-bottom: 20px; }
         .waw-info-label { font-size: 11px; font-weight: 700; color: #0d9488; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
@@ -671,20 +769,18 @@
           <div id="waw-company" data-company="${esc(data.company)}">@ <span id="waw-company-name">${esc(data.company) || 'Company'}</span></div>
           <div id="waw-body">
             ${data.isLoading ? '<div style="color:#718096; display:flex; align-items:center; justify-content:center; height:200px; font-size:16px;">Loading...</div>' : `
-              ${data.description ? `<div class="waw-section"><div class="waw-section-title">Description:</div><div class="waw-section-content">${fmt(data.description)}</div></div>` : ''}
-              ${data.responsibilities ? `<div class="waw-section"><div class="waw-section-title">Responsibilities:</div><div class="waw-section-content">${fmt(data.responsibilities)}</div></div>` : ''}
-              ${data.skills ? `<div class="waw-section"><div class="waw-section-title">Skills:</div><div class="waw-section-content">${fmt(data.skills)}</div></div>` : ''}
-              ${!data.description && !data.responsibilities && !data.skills ? '<div style="color:#718096;">No details found</div>' : ''}
+              ${renderMainSections(data)}
             `}
           </div>
           <div id="waw-footer">
             <div id="waw-actions">
-              <button class="waw-action-btn" id="waw-save" title="Save to My Jobs Folder">📁</button>
+              ${isApplicationsPage ? '' : '<button class="waw-action-btn" id="waw-save" title="Open My Jobs Folder">📁</button>'}
               <button class="waw-action-btn" id="waw-apply" title="Apply">✓ Apply</button>
               <button class="waw-action-btn" id="waw-print" title="Print">🖨️</button>
             </div>
             <div id="waw-nav">
               <button class="waw-nav-btn" id="waw-prev">◀</button>
+              <button class="waw-nav-btn" id="waw-star" title="Shortlist">☆</button>
               <button class="waw-nav-btn" id="waw-next">▶</button>
             </div>
           </div>
@@ -905,9 +1001,17 @@
       if (currentJobId && window.WAWNavigator?.toggleShortlistJob) {
         await window.WAWNavigator.toggleShortlistJob(currentJobId);
         updateSavedBadge(isJobSaved(currentJobId));
+        updateStarButtonState();
         return;
       }
-      clickCurrentModalButton('create_new_folder');
+    };
+
+    const updateStarButtonState = () => {
+      const starBtn = document.getElementById('waw-star');
+      if (!starBtn) return;
+      const shortlisted = isJobSaved(currentJobId);
+      starBtn.textContent = shortlisted ? '★' : '☆';
+      starBtn.classList.toggle('is-shortlisted', shortlisted);
     };
 
     const keyHandler = (e) => {
@@ -944,6 +1048,10 @@
     overlay.onclick = (e) => { if (e.target === overlay) closeAll(); };
     document.getElementById('waw-prev').onclick = () => nav(-1);
     document.getElementById('waw-next').onclick = () => nav(1);
+    document.getElementById('waw-star').onclick = async () => {
+      await toggleCurrentShortlist();
+      updateStarButtonState();
+    };
     
     // Helper function to click a button in the CURRENT WaterlooWorks modal
     const clickCurrentModalButton = (iconName) => {
@@ -1031,10 +1139,22 @@
     };
     
     // Action buttons - trigger buttons in the CURRENT WaterlooWorks modal
-    document.getElementById('waw-save').onclick = async () => {
-      console.log('[WAW] Save button clicked');
-      await toggleCurrentShortlist();
-    };
+    const folderBtn = document.getElementById('waw-save');
+    if (folderBtn) {
+      folderBtn.onclick = async () => {
+        console.log('[WAW] Folder button clicked');
+        let opened = clickCurrentModalButton('create_new_folder');
+        if (!opened) opened = clickCurrentModalButton('folder');
+        if (!opened) opened = clickCurrentModalButton('folder_open');
+        if (!opened && window.WAWFolderManager?.getFolders) {
+          await window.WAWFolderManager.getFolders({
+            forceOpen: true,
+            allowAutoOpenModal: true,
+            jobId: currentJobId
+          });
+        }
+      };
+    }
     
     document.getElementById('waw-apply').onclick = () => {
       console.log('[WAW] Apply button clicked');
@@ -1046,6 +1166,8 @@
       clickCurrentModalButton('print');
     };
 
+    updateStarButtonState();
+
     document.addEventListener('keydown', keyHandler, true);
   }
 
@@ -1054,6 +1176,7 @@
   // ============================================
 
   function handleModal(modal) {
+    if (!isPostingModalNode(modal)) return;
     if (isActive) return;
     
     // Store reference to the current WaterlooWorks modal for action buttons
@@ -1067,6 +1190,7 @@
       description: '', 
       responsibilities: '', 
       skills: '',
+      allFields: [],
       duration: '',
       location: '',
       compensation: '',
@@ -1097,6 +1221,8 @@
         
         // Parse content sections from modal DOM
         const contentData = parseContentSections(modal);
+        const allFields = parseAllListingFields(modal);
+        contentData.allFields = allFields;
         
         // Cache the result
         if (jobId) {
@@ -1129,6 +1255,12 @@
     // Update current job ID and saved badge
     currentJobId = data.jobId;
     updateSavedBadge(isJobSaved(currentJobId));
+    const starBtn = document.getElementById('waw-star');
+    if (starBtn) {
+      const shortlisted = isJobSaved(currentJobId);
+      starBtn.textContent = shortlisted ? '★' : '☆';
+      starBtn.classList.toggle('is-shortlisted', shortlisted);
+    }
     if (companyEl) {
       companyEl.innerHTML = `@ <span id="waw-company-name">${esc(data.company) || 'Company'}</span>`;
       companyEl.dataset.company = data.company;
@@ -1146,12 +1278,7 @@
     }
     
     if (bodyEl) {
-      let content = '';
-      if (data.description) content += `<div class="waw-section"><div class="waw-section-title">Description:</div><div class="waw-section-content">${fmt(data.description)}</div></div>`;
-      if (data.responsibilities) content += `<div class="waw-section"><div class="waw-section-title">Responsibilities:</div><div class="waw-section-content">${fmt(data.responsibilities)}</div></div>`;
-      if (data.skills) content += `<div class="waw-section"><div class="waw-section-title">Skills:</div><div class="waw-section-content">${fmt(data.skills)}</div></div>`;
-      if (!data.description && !data.responsibilities && !data.skills) content = '<div style="color:#718096;">No details found</div>';
-      bodyEl.innerHTML = content;
+      bodyEl.innerHTML = renderMainSections(data);
     }
     
     if (sidebarEl) {
@@ -1175,6 +1302,7 @@
         if (node.nodeType !== 1) continue;
         const modal = node.querySelector?.('.modal__content') || (node.classList?.contains('modal__content') ? node : null);
         if (modal) {
+          if (!isPostingModalNode(modal)) continue;
           console.log('[WAW] New modal detected, isActive:', isActive);
           if (!isActive && Date.now() >= suppressHandleUntil && modal.dataset?.wawSuppress !== 'true') {
             handleModal(modal);
@@ -1187,6 +1315,9 @@
     if (!isActive && Date.now() < navigationIntentUntil) {
       const modal = document.querySelector('.modal__content.height--100, div[data-v-70e7ded6-s] .modal__content');
       if (modal) {
+        if (!isPostingModalNode(modal)) {
+          return;
+        }
         if (Date.now() < suppressHandleUntil || modal.dataset?.wawSuppress === 'true') {
           return;
         }
@@ -1205,6 +1336,9 @@
     if (!link) return;
     const row = link.closest('tr');
     if (!row) return;
+    if (isCancelledRow(row)) return;
+    const idx = Number(row.dataset.wawModalIndex);
+    syncNavigatorContext(idx, row);
     navigationIntentUntil = Date.now() + 1200;
   }, true);
 

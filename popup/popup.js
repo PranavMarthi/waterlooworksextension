@@ -3,6 +3,64 @@ const shortlistFolderSelect = document.getElementById('shortlist-folder-select')
 const shortlistFolderRefresh = document.getElementById('shortlist-folder-refresh');
 const shortlistFolderApply = document.getElementById('shortlist-folder-apply');
 const shortlistStatus = document.getElementById('shortlist-status');
+const shortlistSection = document.querySelector('.shortlist-section');
+
+let activeBoardContext = 'shared';
+let activePageType = 'unknown';
+
+function getBoardContextFromUrl(url) {
+  const lower = String(url || '').toLowerCase();
+  if (lower.includes('/co-op/direct/')) return 'direct';
+  if (lower.includes('/co-op/full/')) return 'full';
+  return 'shared';
+}
+
+function getPageTypeFromUrl(url) {
+  const lower = String(url || '').toLowerCase();
+  if (lower.includes('/applications.htm')) return 'applications';
+  if (lower.includes('/jobs.htm')) return 'jobs';
+  return 'other';
+}
+
+function isApplicationsPageContext() {
+  return activePageType === 'applications';
+}
+
+function setShortlistSectionVisibility() {
+  if (!shortlistSection) return;
+  shortlistSection.style.display = isApplicationsPageContext() ? 'none' : '';
+}
+
+function getContextualKeys(context = activeBoardContext) {
+  if (context === 'direct') {
+    return {
+      folderName: 'shortlistFolderNameDirect',
+      folders: 'shortlistFoldersDirect',
+      selectionRequired: 'shortlistFolderSelectionRequiredDirect',
+      reselect: 'shortlistFolderReselectDirect'
+    };
+  }
+  if (context === 'full') {
+    return {
+      folderName: 'shortlistFolderNameFull',
+      folders: 'shortlistFoldersFull',
+      selectionRequired: 'shortlistFolderSelectionRequiredFull',
+      reselect: 'shortlistFolderReselectFull'
+    };
+  }
+  return {
+    folderName: 'shortlistFolderName',
+    folders: 'shortlistFolders',
+    selectionRequired: 'shortlistFolderSelectionRequired',
+    reselect: 'shortlistFolderReselect'
+  };
+}
+
+function contextLabel(context = activeBoardContext) {
+  if (context === 'direct') return 'Direct';
+  if (context === 'full') return 'Full';
+  return 'Shared';
+}
 
 const EXCLUDED_FOLDER_NAMES = new Set([
   'save',
@@ -63,6 +121,12 @@ async function saveSetting(key, value) {
   await chrome.storage.sync.set({ [key]: value });
 }
 
+async function saveContextSetting(baseKey, value) {
+  const keys = getContextualKeys();
+  const key = keys[baseKey] || baseKey;
+  await saveSetting(key, value);
+}
+
 function populateFolderDropdown(folders, selectedFolder) {
   shortlistFolderSelect.innerHTML = '';
 
@@ -100,40 +164,47 @@ function populateFolderDropdown(folders, selectedFolder) {
 }
 
 async function loadStoredFoldersOnly() {
+  const keys = getContextualKeys();
   const settings = await chrome.storage.sync.get({
-    shortlistFolderName: '',
-    shortlistFolders: []
+    [keys.folderName]: '',
+    [keys.folders]: []
   });
 
-  const folders = uniqueFolders(settings.shortlistFolders);
-  populateFolderDropdown(folders, settings.shortlistFolderName || '');
-  return { folders, selected: settings.shortlistFolderName || '' };
+  const folders = uniqueFolders(settings[keys.folders]);
+  populateFolderDropdown(folders, settings[keys.folderName] || '');
+  return { folders, selected: settings[keys.folderName] || '' };
 }
 
 async function loadSettings() {
   try {
+    if (isApplicationsPageContext()) {
+      setShortlistStatus('Shortlist folder settings are managed from jobs.htm only.', '');
+      return;
+    }
+
+    const keys = getContextualKeys();
     const settings = await chrome.storage.sync.get({
       featuresEnabled: true,
-      shortlistFolderName: '',
-      shortlistFolders: [],
-      shortlistFolderSelectionRequired: false
+      [keys.folderName]: '',
+      [keys.folders]: [],
+      [keys.selectionRequired]: false
     });
 
     quickEnable.checked = settings.featuresEnabled !== false;
 
-    const folders = uniqueFolders(settings.shortlistFolders);
-    populateFolderDropdown(folders, settings.shortlistFolderName || '');
+    const folders = uniqueFolders(settings[keys.folders]);
+    populateFolderDropdown(folders, settings[keys.folderName] || '');
 
-    if (settings.shortlistFolderSelectionRequired) {
+    if (settings[keys.selectionRequired]) {
       setShortlistStatus('Open a posting to select a default folder', 'error');
       return;
     }
 
-    const selected = normalizeFolderName(settings.shortlistFolderName);
+    const selected = normalizeFolderName(settings[keys.folderName]);
     if (selected) {
-      setShortlistStatus(`Selected: ${selected}`, 'success');
+      setShortlistStatus(`${contextLabel()}: ${selected}`, 'success');
     } else {
-      setShortlistStatus('Open a posting, then click Refresh', '');
+      setShortlistStatus(`${contextLabel()}: open a posting, then click Refresh`, '');
     }
   } catch (error) {
     console.error('[WAW Popup] Failed to load settings:', error);
@@ -142,20 +213,26 @@ async function loadSettings() {
 }
 
 async function applySelectedFolder({ force = false } = {}) {
+  await syncActiveContextFromTabs();
+  if (isApplicationsPageContext()) {
+    setShortlistStatus('Open jobs.htm to manage shortlist folders.', 'error');
+    return;
+  }
+
   const value = normalizeFolderName(shortlistFolderSelect?.value || '');
   if (!value) {
     setShortlistStatus('Select a folder first', 'error');
     return;
   }
 
-  await saveSetting('shortlistFolderName', value);
-  await saveSetting('shortlistFolderSelectionRequired', false);
+  await saveContextSetting('folderName', value);
+  await saveContextSetting('selectionRequired', false);
 
   if (force) {
-    await saveSetting('shortlistFolderReselect', Date.now());
+    await saveContextSetting('reselect', Date.now());
   }
 
-  setShortlistStatus(`Selected: ${value}`, 'success');
+  setShortlistStatus(`${contextLabel()}: ${value}`, 'success');
 }
 
 async function findWaterlooWorksTab() {
@@ -166,6 +243,19 @@ async function findWaterlooWorksTab() {
 
   const wwTabs = await chrome.tabs.query({ url: 'https://waterlooworks.uwaterloo.ca/*' });
   return wwTabs[0] || null;
+}
+
+async function syncActiveContextFromTabs() {
+  const tab = await findWaterlooWorksTab();
+  if (tab?.url) {
+    activeBoardContext = getBoardContextFromUrl(tab.url);
+    activePageType = getPageTypeFromUrl(tab.url);
+  } else {
+    activeBoardContext = 'shared';
+    activePageType = 'other';
+  }
+  setShortlistSectionVisibility();
+  return tab;
 }
 
 function sendToContentScript(tabId, message) {
@@ -185,7 +275,11 @@ async function refreshFolders() {
   setShortlistStatus('Refreshing folder list...');
 
   try {
-    const tab = await findWaterlooWorksTab();
+    const tab = await syncActiveContextFromTabs();
+    if (isApplicationsPageContext()) {
+      setShortlistStatus('Open jobs.htm to refresh shortlist folders.', 'error');
+      return;
+    }
     if (!tab) {
       await loadStoredFoldersOnly();
       setShortlistStatus('Open WaterlooWorks, then click Refresh', 'error');
@@ -205,10 +299,13 @@ async function refreshFolders() {
 
     const fetchedFolders = uniqueFolders(response?.folders || []);
     const selectedFolder = normalizeFolderName(response?.selectedFolder || '');
+    if (response?.context) {
+      activeBoardContext = response.context;
+    }
 
     if (response?.requiresModal) {
       populateFolderDropdown(fetchedFolders, selectedFolder);
-      setShortlistStatus('Open a posting to refresh selectable folders', 'error');
+      setShortlistStatus(`${contextLabel()}: open a posting to refresh folders`, 'error');
       return;
     }
 
@@ -222,16 +319,16 @@ async function refreshFolders() {
       return;
     }
 
-    await saveSetting('shortlistFolders', fetchedFolders);
-    await saveSetting('shortlistFolderSelectionRequired', false);
+    await saveContextSetting('folders', fetchedFolders);
+    await saveContextSetting('selectionRequired', false);
     populateFolderDropdown(fetchedFolders, selectedFolder);
 
     const selected = normalizeFolderName(shortlistFolderSelect.value);
     if (selected) {
-      await saveSetting('shortlistFolderName', selected);
+      await saveContextSetting('folderName', selected);
     }
 
-    setShortlistStatus(`Loaded ${fetchedFolders.length} folder${fetchedFolders.length === 1 ? '' : 's'}`, 'success');
+    setShortlistStatus(`${contextLabel()}: loaded ${fetchedFolders.length} folder${fetchedFolders.length === 1 ? '' : 's'}`, 'success');
   } catch (error) {
     console.error('[WAW Popup] Failed to refresh folders:', error);
     await loadStoredFoldersOnly();
@@ -260,6 +357,7 @@ function initEventListeners() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  await syncActiveContextFromTabs();
   await loadSettings();
   initEventListeners();
 });
