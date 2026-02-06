@@ -18,12 +18,15 @@
   
   let jobLinks = [];
   let currentJobIndex = -1;
+  let lastClickedJobId = null;
   let shortlistedJobs = new Set();
   let settings = null;
   let modalObserver = null;
   let isClosingModal = false;
   let folderObserver = null;
   let linkSanitizeObserver = null;
+  let applicationsSummaryObserver = null;
+  let applicationsSummaryRefreshTimer = null;
   let isDefaultFolderPromptVisible = false;
 
   const DEFAULT_SETTINGS = {
@@ -63,6 +66,7 @@
 
   const IS_APPLICATIONS_PAGE = /\/applications\.htm/i.test(window.location.pathname || '');
   const IS_JOBS_PAGE = /\/jobs\.htm/i.test(window.location.pathname || '');
+  const IS_FULL_APPLICATIONS_PAGE = /\/myaccount\/co-op\/full\/applications\.htm/i.test((window.location.pathname || '').toLowerCase());
 
   const FOLDER_MENU_SELECTORS = [
     '[role="menu"]',
@@ -1299,6 +1303,10 @@
     if (Number.isFinite(index)) {
       currentJobIndex = index;
     }
+    const jobId = getJobIdFromRow(row);
+    if (jobId) {
+      lastClickedJobId = String(jobId);
+    }
   }
 
   function enhanceJobTable() {
@@ -1849,6 +1857,126 @@
     }
   }
 
+  function findApplicationsResultsTable() {
+    const tables = Array.from(document.querySelectorAll('table'));
+    return tables.find((table) => {
+      const headers = Array.from(table.querySelectorAll('thead th')).map((th) => (
+        (th.innerText || th.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase()
+      ));
+      if (headers.length === 0) return false;
+      const hasAppStatus = headers.some((text) => text.includes('app status'));
+      const hasJobStatus = headers.some((text) => text.includes('job status'));
+      return hasAppStatus && hasJobStatus;
+    }) || null;
+  }
+
+  function getApplicationsStatusIndices(table) {
+    const headers = Array.from(table.querySelectorAll('thead th'));
+    let appStatusIndex = -1;
+    let jobStatusIndex = -1;
+
+    headers.forEach((th, index) => {
+      const text = (th.innerText || th.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (text.includes('app status')) appStatusIndex = index;
+      if (text.includes('job status')) jobStatusIndex = index;
+    });
+
+    return { appStatusIndex, jobStatusIndex };
+  }
+
+  function classifyApplicationSummaryBucket(appStatusRaw, jobStatusRaw) {
+    const appStatus = normalizeText(appStatusRaw).toLowerCase();
+    const jobStatus = normalizeText(jobStatusRaw).toLowerCase();
+
+    if (jobStatus === 'cancel' || jobStatus.startsWith('cancel')) return 'cancelled';
+    if (appStatus === 'selected for interview') return 'interviewOffers';
+    if (appStatus === 'not selected') return 'hardRejections';
+    if (appStatus === 'applied' && jobStatus === 'expired - apps available') return 'indeterminate';
+    if (appStatus === 'applied' && jobStatus !== 'expired - apps available') return 'softRejections';
+    return 'other';
+  }
+
+  function computeApplicationsSummary(table) {
+    const summary = {
+      interviewOffers: 0,
+      softRejections: 0,
+      hardRejections: 0,
+      cancelled: 0,
+      indeterminate: 0,
+      totalRows: 0
+    };
+
+    const { appStatusIndex, jobStatusIndex } = getApplicationsStatusIndices(table);
+    if (appStatusIndex < 0 || jobStatusIndex < 0) return summary;
+
+    const rows = Array.from(table.querySelectorAll('tbody tr'));
+    rows.forEach((row) => {
+      const cells = Array.from(row.querySelectorAll('th, td'));
+      if (cells.length === 0) return;
+      const appStatus = cells[appStatusIndex]?.innerText || cells[appStatusIndex]?.textContent || '';
+      const jobStatus = cells[jobStatusIndex]?.innerText || cells[jobStatusIndex]?.textContent || '';
+      const bucket = classifyApplicationSummaryBucket(appStatus, jobStatus);
+      summary.totalRows += 1;
+      if (bucket !== 'other') {
+        summary[bucket] += 1;
+      }
+    });
+
+    return summary;
+  }
+
+  function renderApplicationsSummaryCard() {
+    if (!IS_FULL_APPLICATIONS_PAGE) {
+      document.getElementById('waw-applications-summary')?.remove();
+      return;
+    }
+
+    const table = findApplicationsResultsTable();
+    if (!table) {
+      document.getElementById('waw-applications-summary')?.remove();
+      return;
+    }
+
+    const summary = computeApplicationsSummary(table);
+
+    let card = document.getElementById('waw-applications-summary');
+    if (!card) {
+      card = document.createElement('section');
+      card.id = 'waw-applications-summary';
+      table.parentElement?.insertBefore(card, table);
+    }
+
+    card.innerHTML = `
+      <div class="waw-app-summary-title">My Applications Summary</div>
+      <div class="waw-app-summary-grid">
+        <div class="waw-app-summary-item"><span>Interview Offers</span><strong>${summary.interviewOffers}</strong></div>
+        <div class="waw-app-summary-item"><span>Soft Rejections</span><strong>${summary.softRejections}</strong></div>
+        <div class="waw-app-summary-item"><span>Hard Rejections</span><strong>${summary.hardRejections}</strong></div>
+        <div class="waw-app-summary-item"><span>Cancelled</span><strong>${summary.cancelled}</strong></div>
+        <div class="waw-app-summary-item"><span>Indeterminate</span><strong>${summary.indeterminate}</strong></div>
+      </div>
+    `;
+  }
+
+  function setupApplicationsSummaryObserver() {
+    if (!IS_FULL_APPLICATIONS_PAGE) return;
+    if (applicationsSummaryObserver) return;
+
+    const scheduleRefresh = () => {
+      clearTimeout(applicationsSummaryRefreshTimer);
+      applicationsSummaryRefreshTimer = setTimeout(() => {
+        renderApplicationsSummaryCard();
+      }, 120);
+    };
+
+    applicationsSummaryObserver = new MutationObserver(() => {
+      scheduleRefresh();
+    });
+
+    applicationsSummaryObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
+    renderApplicationsSummaryCard();
+  }
+
   function setCurrentJobContext({ index = null, jobId = null } = {}) {
     getAllJobLinks();
 
@@ -2166,6 +2294,7 @@
       observer._timeout = setTimeout(() => {
         console.log('[WAW] Table updated, refreshing...');
         enhanceJobTable();
+        renderApplicationsSummaryCard();
       }, 200);
     });
 
@@ -2244,6 +2373,48 @@
       tbody tr td {
         position: relative;
       }
+
+      #waw-applications-summary {
+        margin: 12px 0 16px;
+        border: 1px solid #d7e3ef;
+        background: linear-gradient(180deg, #f9fcff 0%, #f3f8fd 100%);
+        border-radius: 10px;
+        padding: 12px 14px;
+      }
+
+      #waw-applications-summary .waw-app-summary-title {
+        font-size: 13px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #0f4c81;
+        margin-bottom: 8px;
+      }
+
+      #waw-applications-summary .waw-app-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 8px;
+      }
+
+      #waw-applications-summary .waw-app-summary-item {
+        background: #fff;
+        border: 1px solid #d7e3ef;
+        border-radius: 8px;
+        padding: 8px 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: #43556d;
+      }
+
+      #waw-applications-summary .waw-app-summary-item strong {
+        font-size: 18px;
+        line-height: 1;
+        color: #123d63;
+      }
     `;
 
     document.head.appendChild(style);
@@ -2286,6 +2457,8 @@
     setTimeout(() => {
       enhanceJobTable();
       setupTableObserver();
+      setupApplicationsSummaryObserver();
+      renderApplicationsSummaryCard();
     }, 1500);
 
     console.log('[WAW] Navigator ready!');

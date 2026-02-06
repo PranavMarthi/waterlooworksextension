@@ -7,6 +7,8 @@ const Azure = {
   version: '5.0.0',
   initialized: false,
   settings: null,
+  applicationsSummaryObserver: null,
+  applicationsSummaryDebounceTimer: null,
 
   /**
    * Check if current page is a login/home/logout page that should not be styled
@@ -250,6 +252,10 @@ const Azure = {
    * @param {string} pageType - Type of page
    */
   applyPageEnhancements(pageType) {
+    if (pageType !== 'applications') {
+      this.cleanupApplicationsSummary();
+    }
+
     // Job info rearranger now runs independently via MutationObserver (see job-info-rearranger.js)
     // No need to call it here - it self-initializes
     
@@ -366,8 +372,212 @@ const Azure = {
   enhanceApplications() {
     window.AzureFeatureFlags.withFeature('layout', () => {
       console.log('[Azure] Enhancing applications');
-      // Applications enhancements will go here
+      this.initFullApplicationsSummary();
     });
+  },
+
+  isFullApplicationsPage() {
+    const path = (window.location.pathname || '').toLowerCase();
+    return path.includes('/myaccount/co-op/full/applications.htm');
+  },
+
+  cleanupApplicationsSummary() {
+    if (this.applicationsSummaryObserver) {
+      this.applicationsSummaryObserver.disconnect();
+      this.applicationsSummaryObserver = null;
+    }
+    if (this.applicationsSummaryDebounceTimer) {
+      clearTimeout(this.applicationsSummaryDebounceTimer);
+      this.applicationsSummaryDebounceTimer = null;
+    }
+    document.getElementById('waw-applications-summary')?.remove();
+  },
+
+  initFullApplicationsSummary() {
+    if (!this.isFullApplicationsPage()) {
+      this.cleanupApplicationsSummary();
+      return;
+    }
+
+    this.renderFullApplicationsSummary();
+
+    if (this.applicationsSummaryObserver) {
+      this.applicationsSummaryObserver.disconnect();
+    }
+
+    const scheduleRefresh = () => {
+      if (this.applicationsSummaryDebounceTimer) {
+        clearTimeout(this.applicationsSummaryDebounceTimer);
+      }
+      this.applicationsSummaryDebounceTimer = setTimeout(() => {
+        this.renderFullApplicationsSummary();
+      }, 120);
+    };
+
+    this.applicationsSummaryObserver = new MutationObserver(() => {
+      scheduleRefresh();
+    });
+
+    this.applicationsSummaryObserver.observe(document.body || document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: false
+    });
+  },
+
+  findFullApplicationsTable() {
+    const tables = Array.from(document.querySelectorAll('table'));
+    return tables.find((table) => {
+      const headers = Array.from(table.querySelectorAll('thead th')).map((th) => (
+        (th.innerText || th.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase()
+      ));
+      if (headers.length === 0) return false;
+      const hasAppStatus = headers.some((text) => text.includes('app status'));
+      const hasJobStatus = headers.some((text) => text.includes('job status'));
+      return hasAppStatus && hasJobStatus;
+    }) || null;
+  },
+
+  getApplicationsStatusColumnIndices(table) {
+    const headers = Array.from(table.querySelectorAll('thead th'));
+    let appStatusIndex = -1;
+    let jobStatusIndex = -1;
+
+    headers.forEach((th, index) => {
+      const text = (th.innerText || th.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (text.includes('app status')) appStatusIndex = index;
+      if (text.includes('job status')) jobStatusIndex = index;
+    });
+
+    return { appStatusIndex, jobStatusIndex };
+  },
+
+  classifyApplicationStatus(appStatusRaw, jobStatusRaw) {
+    const appStatus = String(appStatusRaw || '').replace(/\s+/g, ' ').trim().toLowerCase();
+    const jobStatus = String(jobStatusRaw || '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+    if (jobStatus === 'cancel' || jobStatus.startsWith('cancel')) return 'cancelled';
+    if (appStatus === 'selected for interview') return 'interviewOffers';
+    if (appStatus === 'not selected') return 'hardRejections';
+    if (appStatus === 'applied' && jobStatus === 'expired - apps available') return 'indeterminate';
+    if (appStatus === 'applied' && jobStatus !== 'expired - apps available') return 'softRejections';
+    return 'other';
+  },
+
+  computeFullApplicationsSummary(table) {
+    const summary = {
+      interviewOffers: 0,
+      softRejections: 0,
+      hardRejections: 0,
+      cancelled: 0,
+      indeterminate: 0,
+      totalRows: 0
+    };
+
+    const { appStatusIndex, jobStatusIndex } = this.getApplicationsStatusColumnIndices(table);
+    if (appStatusIndex < 0 || jobStatusIndex < 0) {
+      return summary;
+    }
+
+    const rows = Array.from(table.querySelectorAll('tbody tr'));
+    rows.forEach((row) => {
+      const cells = Array.from(row.querySelectorAll('th, td'));
+      if (cells.length === 0) return;
+
+      const appStatus = cells[appStatusIndex]?.innerText || cells[appStatusIndex]?.textContent || '';
+      const jobStatus = cells[jobStatusIndex]?.innerText || cells[jobStatusIndex]?.textContent || '';
+      const bucket = this.classifyApplicationStatus(appStatus, jobStatus);
+
+      summary.totalRows += 1;
+      if (bucket === 'other') return;
+      summary[bucket] += 1;
+    });
+
+    return summary;
+  },
+
+  renderFullApplicationsSummary() {
+    if (!this.isFullApplicationsPage()) {
+      this.cleanupApplicationsSummary();
+      return;
+    }
+
+    const table = this.findFullApplicationsTable();
+    if (!table) {
+      document.getElementById('waw-applications-summary')?.remove();
+      return;
+    }
+
+    const summary = this.computeFullApplicationsSummary(table);
+
+    const cardId = 'waw-applications-summary';
+    let card = document.getElementById(cardId);
+    if (!card) {
+      card = document.createElement('section');
+      card.id = cardId;
+      card.className = 'azure-injected';
+      table.parentElement?.insertBefore(card, table);
+    }
+
+    if (!document.getElementById('waw-applications-summary-style')) {
+      window.AzureDOMHooks.injectStyles(`
+        #waw-applications-summary {
+          margin: 12px 0 16px;
+          border: 1px solid #d7e3ef;
+          background: linear-gradient(180deg, #f9fcff 0%, #f3f8fd 100%);
+          border-radius: 10px;
+          padding: 12px 14px;
+        }
+        #waw-applications-summary .waw-summary-title {
+          font-size: 13px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+          color: #0f4c81;
+          margin-bottom: 8px;
+        }
+        #waw-applications-summary .waw-summary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 8px;
+        }
+        #waw-applications-summary .waw-summary-item {
+          background: #ffffff;
+          border: 1px solid #d7e3ef;
+          border-radius: 8px;
+          padding: 8px 10px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+        }
+        #waw-applications-summary .waw-summary-label {
+          font-size: 12px;
+          color: #43556d;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        #waw-applications-summary .waw-summary-value {
+          font-size: 18px;
+          line-height: 1;
+          font-weight: 700;
+          color: #123d63;
+        }
+      `, 'waw-applications-summary-style');
+    }
+
+    card.innerHTML = `
+      <div class="waw-summary-title">My Applications Summary</div>
+      <div class="waw-summary-grid">
+        <div class="waw-summary-item"><span class="waw-summary-label">Interview Offers</span><span class="waw-summary-value">${summary.interviewOffers}</span></div>
+        <div class="waw-summary-item"><span class="waw-summary-label">Soft Rejections</span><span class="waw-summary-value">${summary.softRejections}</span></div>
+        <div class="waw-summary-item"><span class="waw-summary-label">Hard Rejections</span><span class="waw-summary-value">${summary.hardRejections}</span></div>
+        <div class="waw-summary-item"><span class="waw-summary-label">Cancelled</span><span class="waw-summary-value">${summary.cancelled}</span></div>
+        <div class="waw-summary-item"><span class="waw-summary-label">Indeterminate</span><span class="waw-summary-value">${summary.indeterminate}</span></div>
+      </div>
+    `;
   },
 
   /**
