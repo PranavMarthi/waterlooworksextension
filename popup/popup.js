@@ -1,244 +1,265 @@
-/**
- * Popup Script for WaterlooWorks Azure
- */
-
-// Element references
 const quickEnable = document.getElementById('quick-enable');
-const darkModeToggle = document.getElementById('dark-mode-toggle');
-const openOptions = document.getElementById('open-options');
-const folderSelect = document.getElementById('shortlist-folder-select');
-const folderRefresh = document.getElementById('shortlist-folder-refresh');
-const folderStatus = document.getElementById('shortlist-status');
+const shortlistFolderSelect = document.getElementById('shortlist-folder-select');
+const shortlistFolderRefresh = document.getElementById('shortlist-folder-refresh');
+const shortlistFolderApply = document.getElementById('shortlist-folder-apply');
+const shortlistStatus = document.getElementById('shortlist-status');
 
-/**
- * Find the active WaterlooWorks tab (or any WW tab)
- * @returns {Promise<chrome.tabs.Tab|null>}
- */
-async function findWaterlooWorksTab() {
-  try {
-    // First try the active tab
-    const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (activeTab?.url?.includes('waterlooworks.uwaterloo.ca')) {
-      return activeTab;
-    }
-    // Fall back to any WaterlooWorks tab
-    const wwTabs = await chrome.tabs.query({ url: 'https://waterlooworks.uwaterloo.ca/*' });
-    return wwTabs.length > 0 ? wwTabs[0] : null;
-  } catch (e) {
-    console.error('[Azure Popup] Failed to query tabs:', e);
-    return null;
-  }
+const EXCLUDED_FOLDER_NAMES = new Set([
+  'save',
+  'saved',
+  'my applications',
+  'my program',
+  'remove from search',
+  'removed from search',
+  'select all',
+  'select row',
+  'create new folder',
+  'create a new folder',
+  'new folder',
+  'create folder',
+  'create a folder',
+  'add folder'
+]);
+
+function normalizeFolderName(name) {
+  return String(name || '')
+    .replace(/toggle_?on\s*toggle_?off/gi, ' ')
+    .replace(/toggle_?on|toggle_?off/gi, ' ')
+    .replace(/^[/\\>\-]+\s*/, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
-/**
- * Send a message to the content script on a WaterlooWorks tab
- */
-async function sendToContentScript(tabId, message) {
-  return new Promise((resolve, reject) => {
-    chrome.tabs.sendMessage(tabId, message, (response) => {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError.message));
-      } else {
-        resolve(response);
-      }
-    });
+function isExcludedFolderName(name) {
+  const lower = normalizeFolderName(name).toLowerCase();
+  return !lower || EXCLUDED_FOLDER_NAMES.has(lower);
+}
+
+function uniqueFolders(folders) {
+  const seen = new Set();
+  const result = [];
+
+  (folders || []).forEach((folder) => {
+    const name = normalizeFolderName(folder);
+    if (!name || isExcludedFolderName(name)) return;
+
+    const key = name.toLowerCase();
+    if (seen.has(key)) return;
+
+    seen.add(key);
+    result.push(name);
   });
+
+  return result;
 }
 
-/**
- * Populate the folder dropdown from a list of names
- */
+function setShortlistStatus(text, type = '') {
+  if (!shortlistStatus) return;
+  shortlistStatus.textContent = text;
+  shortlistStatus.className = `shortlist-status${type ? ` ${type}` : ''}`;
+}
+
+async function saveSetting(key, value) {
+  await chrome.storage.sync.set({ [key]: value });
+}
+
 function populateFolderDropdown(folders, selectedFolder) {
-  if (!folderSelect) return;
+  shortlistFolderSelect.innerHTML = '';
 
-  // Clear existing options except the placeholder
-  folderSelect.innerHTML = '';
+  const normalizedFolders = uniqueFolders(folders);
+  const normalizedSelected = normalizeFolderName(selectedFolder);
 
-  if (!folders || folders.length === 0) {
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.disabled = true;
-    placeholder.selected = true;
-    placeholder.textContent = '-- No folders found --';
-    folderSelect.appendChild(placeholder);
+  if (normalizedFolders.length === 0) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'Open a posting to select a folder';
+    option.disabled = true;
+    option.selected = true;
+    shortlistFolderSelect.appendChild(option);
     return;
   }
 
-  folders.forEach((name) => {
-    if (!name) return;
+  normalizedFolders.forEach((folder) => {
     const option = document.createElement('option');
-    option.value = name;
-    option.textContent = name;
-    if (name === selectedFolder) {
-      option.selected = true;
-    }
-    folderSelect.appendChild(option);
+    option.value = folder;
+    option.textContent = folder;
+    shortlistFolderSelect.appendChild(option);
   });
 
-  // If no folder was selected but we have a selectedFolder value, and it's in the list, select it
-  if (selectedFolder && !folderSelect.value) {
-    // The selected folder might not be in the list; add it as the first option
-    const hasSelected = folders.some(f => f === selectedFolder);
-    if (!hasSelected) {
-      const option = document.createElement('option');
-      option.value = selectedFolder;
-      option.textContent = selectedFolder;
-      option.selected = true;
-      folderSelect.insertBefore(option, folderSelect.firstChild);
-    }
-  }
-}
-
-/**
- * Set status text with optional type ('', 'success', 'error')
- */
-function setStatus(text, type = '') {
-  if (!folderStatus) return;
-  folderStatus.textContent = text;
-  folderStatus.className = 'shortlist-status' + (type ? ' ' + type : '');
-}
-
-/**
- * Fetch folders from the content script on the WaterlooWorks tab
- */
-async function fetchFoldersFromTab(forceOpen = false) {
-  if (folderRefresh) folderRefresh.classList.add('spinning');
-  setStatus('Fetching folders...');
-
-  const tab = await findWaterlooWorksTab();
-  if (!tab) {
-    setStatus('Open WaterlooWorks to load folders', 'error');
-    if (folderRefresh) folderRefresh.classList.remove('spinning');
-    // Still populate from stored folders as fallback
-    await loadStoredFolders();
+  if (!normalizedSelected) {
+    shortlistFolderSelect.selectedIndex = 0;
     return;
   }
 
-  try {
-    const response = await sendToContentScript(tab.id, {
-      action: 'getShortlistFolders',
-      forceOpen: forceOpen
-    });
-
-    if (folderRefresh) folderRefresh.classList.remove('spinning');
-
-    if (response?.error) {
-      setStatus('Error: ' + response.error, 'error');
-      await loadStoredFolders();
-      return;
-    }
-
-    const folders = response?.folders || [];
-    const selectedFolder = response?.selectedFolder || '';
-
-    if (folders.length > 0) {
-      // Save to storage so they persist across popup opens
-      await chrome.storage.sync.set({ shortlistFolders: folders });
-      populateFolderDropdown(folders, selectedFolder);
-      setStatus(folders.length + ' folder' + (folders.length !== 1 ? 's' : '') + ' found', 'success');
-    } else {
-      setStatus('No folders found on page', '');
-      await loadStoredFolders();
-    }
-  } catch (error) {
-    if (folderRefresh) folderRefresh.classList.remove('spinning');
-    console.error('[Azure Popup] Failed to fetch folders:', error);
-    setStatus('Could not reach WaterlooWorks tab', 'error');
-    await loadStoredFolders();
+  const match = normalizedFolders.find((folder) => folder.toLowerCase() === normalizedSelected.toLowerCase());
+  if (match) {
+    shortlistFolderSelect.value = match;
+  } else {
+    shortlistFolderSelect.selectedIndex = 0;
   }
 }
 
-/**
- * Load folders from chrome.storage (fallback when tab not available)
- */
-async function loadStoredFolders() {
-  try {
-    const settings = await chrome.storage.sync.get({
-      shortlistFolderName: 'shortlist',
-      shortlistFolders: []
-    });
-    const folders = Array.isArray(settings.shortlistFolders) ? settings.shortlistFolders : [];
-    populateFolderDropdown(folders, settings.shortlistFolderName);
-  } catch (e) {
-    console.error('[Azure Popup] Failed to load stored folders:', e);
-  }
+async function loadStoredFoldersOnly() {
+  const settings = await chrome.storage.sync.get({
+    shortlistFolderName: '',
+    shortlistFolders: []
+  });
+
+  const folders = uniqueFolders(settings.shortlistFolders);
+  populateFolderDropdown(folders, settings.shortlistFolderName || '');
+  return { folders, selected: settings.shortlistFolderName || '' };
 }
 
-/**
- * Load settings
- */
 async function loadSettings() {
   try {
     const settings = await chrome.storage.sync.get({
       featuresEnabled: true,
-      darkMode: false,
-      shortlistFolderName: 'shortlist',
-      shortlistFolders: []
+      shortlistFolderName: '',
+      shortlistFolders: [],
+      shortlistFolderSelectionRequired: false
     });
-    
-    quickEnable.checked = settings.featuresEnabled;
-    darkModeToggle.checked = settings.darkMode;
 
-    // Populate dropdown from stored folders first (instant), then try fetching live
-    const folders = Array.isArray(settings.shortlistFolders) ? settings.shortlistFolders : [];
-    populateFolderDropdown(folders, settings.shortlistFolderName);
+    quickEnable.checked = settings.featuresEnabled !== false;
 
-    // Attempt to fetch live folders from the WaterlooWorks tab
-    fetchFoldersFromTab(false);
-  } catch (error) {
-    console.error('[Azure Popup] Failed to load settings:', error);
-  }
-}
+    const folders = uniqueFolders(settings.shortlistFolders);
+    populateFolderDropdown(folders, settings.shortlistFolderName || '');
 
-/**
- * Save setting
- */
-async function saveSetting(key, value) {
-  try {
-    await chrome.storage.sync.set({ [key]: value });
-  } catch (error) {
-    console.error('[Azure Popup] Failed to save setting:', error);
-  }
-}
-
-/**
- * Initialize event listeners
- */
-function initEventListeners() {
-  // Quick enable toggle
-  quickEnable.addEventListener('change', (e) => {
-    saveSetting('featuresEnabled', e.target.checked);
-  });
-
-  // Dark mode toggle
-  darkModeToggle.addEventListener('change', (e) => {
-    saveSetting('darkMode', e.target.checked);
-  });
-
-  // Open options
-  openOptions.addEventListener('click', () => {
-    chrome.runtime.openOptionsPage();
-  });
-
-  // Folder dropdown selection
-  folderSelect?.addEventListener('change', (e) => {
-    const value = e.target.value;
-    if (value) {
-      saveSetting('shortlistFolderName', value);
-      // Also notify the content script via a reselect timestamp
-      saveSetting('shortlistFolderReselect', Date.now());
-      setStatus('Folder set to: ' + value, 'success');
+    if (settings.shortlistFolderSelectionRequired) {
+      setShortlistStatus('Open a posting to select a default folder', 'error');
+      return;
     }
-  });
 
-  // Refresh button — force-scrape folders from the WW page
-  folderRefresh?.addEventListener('click', () => {
-    fetchFoldersFromTab(true);
+    const selected = normalizeFolderName(settings.shortlistFolderName);
+    if (selected) {
+      setShortlistStatus(`Selected: ${selected}`, 'success');
+    } else {
+      setShortlistStatus('Open a posting, then click Refresh', '');
+    }
+  } catch (error) {
+    console.error('[WAW Popup] Failed to load settings:', error);
+    setShortlistStatus('Failed to load popup settings', 'error');
+  }
+}
+
+async function applySelectedFolder({ force = false } = {}) {
+  const value = normalizeFolderName(shortlistFolderSelect?.value || '');
+  if (!value) {
+    setShortlistStatus('Select a folder first', 'error');
+    return;
+  }
+
+  await saveSetting('shortlistFolderName', value);
+  await saveSetting('shortlistFolderSelectionRequired', false);
+
+  if (force) {
+    await saveSetting('shortlistFolderReselect', Date.now());
+  }
+
+  setShortlistStatus(`Selected: ${value}`, 'success');
+}
+
+async function findWaterlooWorksTab() {
+  const [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (activeTab?.url?.includes('waterlooworks.uwaterloo.ca')) {
+    return activeTab;
+  }
+
+  const wwTabs = await chrome.tabs.query({ url: 'https://waterlooworks.uwaterloo.ca/*' });
+  return wwTabs[0] || null;
+}
+
+function sendToContentScript(tabId, message) {
+  return new Promise((resolve, reject) => {
+    chrome.tabs.sendMessage(tabId, message, (response) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(response);
+    });
   });
 }
 
-// Initialize
-document.addEventListener('DOMContentLoaded', () => {
-  loadSettings();
+async function refreshFolders() {
+  shortlistFolderRefresh.classList.add('spinning');
+  setShortlistStatus('Refreshing folder list...');
+
+  try {
+    const tab = await findWaterlooWorksTab();
+    if (!tab) {
+      await loadStoredFoldersOnly();
+      setShortlistStatus('Open WaterlooWorks, then click Refresh', 'error');
+      return;
+    }
+
+    const response = await sendToContentScript(tab.id, {
+      action: 'getShortlistFolders',
+      forceOpen: true
+    });
+
+    if (response?.error) {
+      await loadStoredFoldersOnly();
+      setShortlistStatus(response.error, 'error');
+      return;
+    }
+
+    const fetchedFolders = uniqueFolders(response?.folders || []);
+    const selectedFolder = normalizeFolderName(response?.selectedFolder || '');
+
+    if (response?.requiresModal) {
+      populateFolderDropdown(fetchedFolders, selectedFolder);
+      setShortlistStatus('Open a posting to refresh selectable folders', 'error');
+      return;
+    }
+
+    if (fetchedFolders.length === 0) {
+      const fallback = await loadStoredFoldersOnly();
+      if (fallback.folders.length > 0) {
+        setShortlistStatus('No new folders found. Using cached list.', '');
+      } else {
+        setShortlistStatus('No valid folders found in this posting.', 'error');
+      }
+      return;
+    }
+
+    await saveSetting('shortlistFolders', fetchedFolders);
+    await saveSetting('shortlistFolderSelectionRequired', false);
+    populateFolderDropdown(fetchedFolders, selectedFolder);
+
+    const selected = normalizeFolderName(shortlistFolderSelect.value);
+    if (selected) {
+      await saveSetting('shortlistFolderName', selected);
+    }
+
+    setShortlistStatus(`Loaded ${fetchedFolders.length} folder${fetchedFolders.length === 1 ? '' : 's'}`, 'success');
+  } catch (error) {
+    console.error('[WAW Popup] Failed to refresh folders:', error);
+    await loadStoredFoldersOnly();
+    setShortlistStatus('Could not fetch folders from WaterlooWorks', 'error');
+  } finally {
+    shortlistFolderRefresh.classList.remove('spinning');
+  }
+}
+
+function initEventListeners() {
+  quickEnable.addEventListener('change', (event) => {
+    saveSetting('featuresEnabled', event.target.checked);
+  });
+
+  shortlistFolderSelect?.addEventListener('change', () => {
+    applySelectedFolder({ force: false });
+  });
+
+  shortlistFolderRefresh?.addEventListener('click', () => {
+    refreshFolders();
+  });
+
+  shortlistFolderApply?.addEventListener('click', () => {
+    applySelectedFolder({ force: true });
+  });
+}
+
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadSettings();
   initEventListeners();
 });

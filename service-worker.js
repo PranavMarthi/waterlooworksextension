@@ -1,135 +1,67 @@
 /**
- * Service Worker for WaterlooWorks Azure
- * Handles background tasks, extension lifecycle, and messaging
+ * Background service worker for WaterlooActuallyWorks.
+ * Keeps install defaults and simple utility messaging.
  */
 
-// Extension version
-const VERSION = '4.0.0';
+const VERSION = '5.0.0';
 
-/**
- * Handle extension installation
- */
-chrome.runtime.onInstalled.addListener((details) => {
-  console.log('[Azure SW] Extension installed:', details.reason);
-  
+const INSTALL_DEFAULTS = {
+  version: VERSION,
+  firstRun: true,
+  featuresEnabled: true,
+  keyboardShortcuts: true,
+  shortlistFolderName: '',
+  shortlistFolders: [],
+  shortlistFolderSelectionRequired: true,
+  jobRearrangerEnabled: true,
+  jobRearrangerPriorityKeys: ['duration', 'location', 'compensation', 'deadline', 'method'],
+  jobRearrangerStandardOrder: ['job_description', 'responsibilities', 'required_skills', 'targeted_degrees']
+};
+
+chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install') {
-    // First time installation
-    chrome.storage.sync.set({
-      version: VERSION,
-      firstRun: true,
-      featuresEnabled: true,
-      themeId: 'azure-light',
-      darkMode: false
-    });
-    
-    // Open options page on first install
-    chrome.tabs.create({
-      url: chrome.runtime.getURL('options/options.html?welcome=true')
-    });
-  } else if (details.reason === 'update') {
-    // Extension updated
-    console.log('[Azure SW] Updated from', details.previousVersion, 'to', VERSION);
-    
-    chrome.storage.sync.set({
-      version: VERSION
-    });
+    await chrome.storage.sync.set(INSTALL_DEFAULTS);
+    chrome.tabs.create({ url: chrome.runtime.getURL('options/options.html') });
+    return;
+  }
+
+  if (details.reason === 'update') {
+    await chrome.storage.sync.set({ version: VERSION });
   }
 });
 
-/**
- * Handle messages from content scripts
- */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log('[Azure SW] Message received:', request.action);
-  
-  switch (request.action) {
+  switch (request?.action) {
     case 'getVersion':
       sendResponse({ version: VERSION });
-      break;
-      
-    case 'openOptions':
-      chrome.tabs.create({
-        url: chrome.runtime.getURL('options/options.html')
-      });
-      sendResponse({ success: true });
-      break;
-      
+      return;
+
     case 'openTab':
+      if (!request.url) {
+        sendResponse({ success: false, error: 'Missing URL' });
+        return;
+      }
       chrome.tabs.create({
         url: request.url,
         active: request.active !== false
       });
       sendResponse({ success: true });
-      break;
-      
+      return;
+
     case 'getSettings':
       chrome.storage.sync.get(null, (settings) => {
-        sendResponse(settings);
+        sendResponse(settings || {});
       });
-      return true; // Keep channel open for async response
-      
+      return true;
+
     case 'saveSettings':
-      chrome.storage.sync.set(request.settings, () => {
+      chrome.storage.sync.set(request.settings || {}, () => {
         sendResponse({ success: true });
       });
       return true;
-      
+
     default:
-      sendResponse({ error: 'Unknown action' });
+      sendResponse({ success: false, error: 'Unknown action' });
+      return;
   }
 });
-
-/**
- * Handle extension icon click (if no popup)
- */
-chrome.action.onClicked.addListener((tab) => {
-  // This only fires if no popup is defined
-  // Since we have a popup, this won't be triggered normally
-  console.log('[Azure SW] Action clicked on tab:', tab.id);
-});
-
-/**
- * Listen for tab updates to potentially re-inject
- */
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.url?.includes('waterlooworks.uwaterloo.ca')) {
-    console.log('[Azure SW] WaterlooWorks tab updated:', tabId);
-  }
-});
-
-/**
- * Context menu setup (optional)
- */
-function setupContextMenus() {
-  chrome.contextMenus.removeAll(() => {
-    chrome.contextMenus.create({
-      id: 'azure-options',
-      title: 'WaterlooWorks Azure Options',
-      contexts: ['action']
-    });
-  });
-}
-
-// Set up context menus when service worker starts
-chrome.runtime.onStartup.addListener(() => {
-  console.log('[Azure SW] Service worker started');
-  setupContextMenus();
-});
-
-// Also set up on install
-chrome.runtime.onInstalled.addListener(() => {
-  setupContextMenus();
-});
-
-/**
- * Handle context menu clicks
- */
-chrome.contextMenus.onClicked.addListener((info, tab) => {
-  if (info.menuItemId === 'azure-options') {
-    chrome.tabs.create({
-      url: chrome.runtime.getURL('options/options.html')
-    });
-  }
-});
-
-console.log('[Azure SW] Service worker loaded');

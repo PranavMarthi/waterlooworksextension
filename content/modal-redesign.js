@@ -13,18 +13,10 @@
   // Cache parsed results by job ID
   const cache = new Map();
   
-  // Track saved jobs (persist in localStorage)
-  let savedJobs = new Set(JSON.parse(localStorage.getItem('waw-saved-jobs') || '[]'));
-  
   function isJobSaved(jobId) {
-    return jobId && savedJobs.has(jobId);
-  }
-  
-  function markJobAsSaved(jobId) {
-    if (!jobId) return;
-    savedJobs.add(jobId);
-    localStorage.setItem('waw-saved-jobs', JSON.stringify([...savedJobs]));
-    updateSavedBadge(true);
+    if (!jobId) return false;
+    const navigatorSet = window.WAWNavigator?.shortlistedJobs;
+    return !!(navigatorSet && navigatorSet.has(String(jobId)));
   }
   
   function updateSavedBadge(isSaved) {
@@ -57,12 +49,12 @@
     for (const mut of mutations) {
       for (const node of mut.addedNodes) {
         if (node.nodeType !== 1) continue;
-        // Check if it's the WW job modal or contains it (avoid matching generic [role="dialog"])
-        if (node.matches?.('div[data-v-70e7ded6-s], .modal__content, .modal__overlay')) {
+        // Check if it's the WW modal or contains it
+        if (node.matches?.('div[data-v-70e7ded6-s], .modal__content, .modal__overlay, [role="dialog"]')) {
           hideOriginalModal(node);
         }
         // Also check children
-        const modal = node.querySelector?.('div[data-v-70e7ded6-s], .modal__content, .modal__overlay');
+        const modal = node.querySelector?.('div[data-v-70e7ded6-s], .modal__content, .modal__overlay, [role="dialog"]');
         if (modal) hideOriginalModal(modal);
       }
     }
@@ -70,7 +62,7 @@
   hideObserver.observe(document.documentElement, { childList: true, subtree: true });
   
   // Also hide any existing modals right now
-  document.querySelectorAll('div[data-v-70e7ded6-s], .modal__content, .modal__overlay').forEach(hideOriginalModal);
+  document.querySelectorAll('div[data-v-70e7ded6-s], .modal__content, .modal__overlay, [role="dialog"]').forEach(hideOriginalModal);
 
   // Backup CSS styles
   const style = document.createElement('style');
@@ -89,7 +81,6 @@
   let currentJobIndex = -1;
   let isNavigating = false;
   let lastClickedJobId = null;
-  let navGeneration = 0; // Incremented each navigation to invalidate stale callbacks
 
   const JOB_LINK_SELECTORS = [
     'a.overflow--ellipsis',
@@ -98,25 +89,54 @@
     'a[onclick]'
   ];
 
+  function isLikelyPostingLink(link) {
+    if (!link) return false;
+    const text = (link.textContent || '').trim();
+    if (!text || text.length > 220) return false;
+    if (link.querySelector('i.material-icons')) return false;
+    const href = (link.getAttribute('href') || '').trim().toLowerCase();
+    if (href.startsWith('mailto:') || href.startsWith('tel:')) return false;
+    return true;
+  }
+
+  function findPostingLinkInRow(row) {
+    if (!row) return null;
+
+    for (const selector of JOB_LINK_SELECTORS) {
+      const link = row.querySelector(selector);
+      if (isLikelyPostingLink(link)) return link;
+    }
+
+    const candidates = Array.from(row.querySelectorAll('a'));
+    for (const candidate of candidates) {
+      const href = (candidate.getAttribute('href') || '').trim().toLowerCase();
+      if (href.startsWith('javascript:') && isLikelyPostingLink(candidate)) {
+        return candidate;
+      }
+      if (candidate.hasAttribute('onclick') && isLikelyPostingLink(candidate)) {
+        return candidate;
+      }
+    }
+
+    for (const candidate of candidates) {
+      if (isLikelyPostingLink(candidate)) return candidate;
+    }
+
+    return null;
+  }
+
   function refreshJobLinks() {
-    const rows = Array.from(document.querySelectorAll('table tbody tr'));
+    const rows = Array.from(document.querySelectorAll('table tbody tr, tr.table__row--body'));
     const links = [];
 
     rows.forEach((row) => {
-      let link = null;
-      for (const selector of JOB_LINK_SELECTORS) {
-        link = row.querySelector(selector);
-        if (link) break;
-      }
-      if (!link) {
-        link = row.querySelector('a[href*="javascript"], a[onclick]');
-      }
+      const link = findPostingLinkInRow(row);
       if (link) links.push(link);
     });
 
-    jobLinks = links;
+    jobLinks = Array.from(new Set(links));
     if (jobLinks.length === 0) {
-      jobLinks = Array.from(document.querySelectorAll('tbody a'));
+      jobLinks = Array.from(document.querySelectorAll('tbody a')).filter(isLikelyPostingLink);
     }
 
     jobLinks.forEach((link, index) => {
@@ -259,146 +279,19 @@
     }
   }
 
-  function showNavNotification(message) {
-    // Lightweight notification for navigation edge cases
-    const existing = document.getElementById('waw-nav-notification');
-    if (existing) existing.remove();
-    const el = document.createElement('div');
-    el.id = 'waw-nav-notification';
-    el.textContent = message;
-    el.style.cssText = `
-      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
-      background: rgba(0,0,0,0.75); color: white; padding: 10px 20px;
-      border-radius: 8px; font-size: 14px; font-weight: 500; z-index: 999999999;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      animation: waw-overlay-in 0.2s ease;
-    `;
-    document.body.appendChild(el);
-    setTimeout(() => {
-      el.style.opacity = '0';
-      el.style.transition = 'opacity 0.3s ease';
-      setTimeout(() => el.remove(), 300);
-    }, 1500);
-  }
-
-  function closeHiddenWWModal() {
-    const closeBtn = document.querySelector('button[aria-label="Close"], .modal__close');
-    if (closeBtn) closeBtn.click();
-  }
-
-  /**
-   * Poll for a WaterlooWorks modal to appear with content.
-   * Resolves with the modal element, or null on timeout.
-   */
-  function pollForModal(timeoutMs = 3000) {
-    return new Promise((resolve) => {
-      const start = Date.now();
-      const check = () => {
-        const modal = document.querySelector(
-          '.modal__content.height--100, div[data-v-70e7ded6-s] .modal__content, .modal__content'
-        );
-        if (modal) {
-          const hasTitle = modal.querySelector('.dashboard-header__posting-title h2, h2.h3');
-          const hasFields = modal.querySelectorAll('.tag__key-value-list').length > 3;
-          if (hasTitle || hasFields) {
-            resolve(modal);
-            return;
-          }
-        }
-        if (Date.now() - start < timeoutMs) {
-          setTimeout(check, 100);
-        } else {
-          // Last-ditch: return whatever modal exists even without full content
-          resolve(modal || null);
-        }
-      };
-      setTimeout(check, 80);
-    });
-  }
-
-  /**
-   * After a pagination button is clicked, poll until the job table
-   * has new content (different job IDs), then open the target job.
-   * @param {'first'|'last'} position - which job to open on the new page
-   */
-  function waitForTableUpdateThenOpen(position, gen) {
-    const oldJobIds = new Set(
-      jobLinks.map(link => {
-        const row = link.closest('tr');
-        return row ? getJobIdFromRow(row) : null;
-      }).filter(Boolean)
-    );
-
-    console.log(`[WAW] Waiting for table update, will open ${position} job. Old jobs: ${oldJobIds.size}`);
-
-    let attempts = 0;
-    const maxAttempts = 40; // ~4s at 100ms intervals
-
-    const check = () => {
-      // Abort if a newer navigation has started
-      if (gen !== navGeneration) return;
-
-      attempts++;
-      refreshJobLinks();
-
-      const newJobIds = new Set(
-        jobLinks.map(link => {
-          const row = link.closest('tr');
-          return row ? getJobIdFromRow(row) : null;
-        }).filter(Boolean)
-      );
-
-      const hasChanged = newJobIds.size > 0 &&
-        ![...newJobIds].every(id => oldJobIds.has(id));
-
-      if (hasChanged) {
-        console.log('[WAW] Table content changed, opening ' + position + ' job');
-        setTimeout(() => {
-          if (gen !== navGeneration) return;
-          refreshJobLinks();
-          if (jobLinks.length === 0) {
-            console.log('[WAW] No job links after pagination');
-            isNavigating = false;
-            return;
-          }
-
-          const targetIndex = position === 'first' ? 0 : jobLinks.length - 1;
-          currentJobIndex = targetIndex;
-          const link = jobLinks[targetIndex];
-
-          if (link) {
-            navigationIntentUntil = Date.now() + 1200;
-            safeClick(link);
-            pollForModal(3000).then((modal) => {
-              if (gen !== navGeneration) return;
-              if (modal && !isActive) {
-                handleModal(modal);
-              }
-              isNavigating = false;
-            });
-          } else {
-            isNavigating = false;
-          }
-        }, 300);
-      } else if (attempts < maxAttempts) {
-        setTimeout(check, 100);
-      } else {
-        console.log('[WAW] Pagination table watch timed out');
-        showNavNotification('Page change timed out');
-        isNavigating = false;
-      }
-    };
-
-    setTimeout(check, 100);
-  }
-
   function navigateToJob(direction) {
     console.log('[WAW] navigateToJob called, direction:', direction);
     
     if (isNavigating) return;
     isNavigating = true;
-    const gen = ++navGeneration; // Tag this navigation cycle
-    navigationIntentUntil = Date.now() + 5000;
+    navigationIntentUntil = Date.now() + 1200;
+
+    // Prefer navigator.js pagination-aware navigation to avoid page-wrap regressions.
+    if (window.WAWNavigator?.navigateJob) {
+      window.WAWNavigator.navigateJob(direction);
+      isNavigating = false;
+      return;
+    }
 
     if (jobLinks.length === 0) refreshJobLinks();
     if (jobLinks.length === 0) {
@@ -413,70 +306,83 @@
 
     // Calculate new index
     let newIndex = currentJobIndex + direction;
-
-    // Handle pagination / edge cases instead of wrapping
-    if (newIndex < 0) {
-      // At the beginning of the page — try previous page
-      const prevPageBtn = document.querySelector('a[aria-label="Go to previous page"]');
-      if (prevPageBtn) {
-        console.log('[WAW] Navigating to previous page (last job)');
-        closeHiddenWWModal();
-        waitForTableUpdateThenOpen('last', gen);
-        safeClick(prevPageBtn);
-        return; // isNavigating will be reset by waitForTableUpdateThenOpen
-      }
-      // No previous page — we're on the very first job
-      showNavNotification('First job on first page');
-      isNavigating = false;
-      return;
-    }
-
-    if (newIndex >= jobLinks.length) {
-      // At the end of the page — try next page
-      const nextPageBtn = document.querySelector('a[aria-label="Go to next page"]');
-      if (nextPageBtn) {
-        console.log('[WAW] Navigating to next page (first job)');
-        closeHiddenWWModal();
-        waitForTableUpdateThenOpen('first', gen);
-        safeClick(nextPageBtn);
-        return; // isNavigating will be reset by waitForTableUpdateThenOpen
-      }
-      // No next page — we're on the very last job
-      showNavNotification('Last job on last page');
-      isNavigating = false;
-      return;
-    }
+    
+    // Wrap around
+    if (newIndex < 0) newIndex = jobLinks.length - 1;
+    if (newIndex >= jobLinks.length) newIndex = 0;
     
     console.log('[WAW] New job index:', newIndex);
     currentJobIndex = newIndex;
 
     // Close the hidden WW modal first
-    closeHiddenWWModal();
+    const closeBtn = document.querySelector('button[aria-label="Close"], .modal__close, [data-v-70e7ded6-s] button');
+    if (closeBtn) {
+      closeBtn.click();
+    }
 
-    // Click the new job link after a short delay, then poll for modal
+    function pollForModal(expectedJobId, timeoutMs = 3500) {
+      return new Promise((resolve) => {
+        const start = Date.now();
+        let retriedRowClick = false;
+
+        const check = () => {
+          const modal = document.querySelector('.modal__content.height--100, div[data-v-70e7ded6-s] .modal__content, .modal__content');
+          if (modal) {
+            const hasTitle = !!modal.querySelector('.dashboard-header__posting-title h2, h2.h3');
+            const hasFields = modal.querySelectorAll('.tag__key-value-list').length > 3;
+            const matchesExpectedId = expectedJobId
+              ? (modal.textContent || '').includes(String(expectedJobId))
+              : false;
+            if (hasTitle || hasFields || matchesExpectedId) {
+              resolve(modal);
+              return;
+            }
+          }
+
+          const elapsed = Date.now() - start;
+          if (!retriedRowClick && elapsed > 900) {
+            const row = jobLinks[newIndex]?.closest?.('tr');
+            if (row) {
+              row.click();
+              retriedRowClick = true;
+            }
+          }
+
+          if (elapsed >= timeoutMs) {
+            resolve(modal || null);
+            return;
+          }
+
+          setTimeout(check, 100);
+        };
+
+        setTimeout(check, 80);
+      });
+    }
+
+    // Click the new job link after a short delay
     setTimeout(() => {
-      if (gen !== navGeneration) return; // Stale navigation, abort
       const link = jobLinks[newIndex];
       if (link) {
         console.log('[WAW] Clicking job link:', link.textContent?.substring(0, 50));
+        const targetRow = link.closest('tr');
+        const targetJobId = getJobIdFromRow(targetRow);
         safeClick(link);
-        
-        // Poll for the modal to appear with content (up to 3s)
-        pollForModal(3000).then((modal) => {
-          if (gen !== navGeneration) return; // Stale navigation, abort
+
+        // Wait until the new modal content is actually ready.
+        pollForModal(targetJobId).then((modal) => {
           if (modal && !isActive) {
             console.log('[WAW] Modal found after navigation, handling...');
             handleModal(modal);
-          } else if (!modal) {
-            console.log('[WAW] Modal not found after polling');
-            showNavNotification('Could not load job posting');
+          } else {
+            console.warn('[WAW] Modal did not load in time for job navigation');
           }
           isNavigating = false;
         });
       } else {
         isNavigating = false;
       }
-    }, 150);
+    }, 220);
   }
 
   // ============================================
@@ -816,24 +722,17 @@
     const closeAll = () => {
       console.log('[WAW] closeAll() called');
       
-      // Pause hideObserver during close to prevent mutation cascades
-      hideObserver.disconnect();
-      setTimeout(() => {
-        hideObserver.observe(document.documentElement, { childList: true, subtree: true });
-        console.log('[WAW] hideObserver reconnected');
-      }, 500);
-      
       // Remove our overlay
       if (overlay) { overlay.remove(); overlay = null; }
       document.querySelectorAll('#waw-overlay').forEach((el) => el.remove());
       document.body.classList.remove('waw-active');
       isActive = false;
       document.removeEventListener('keydown', keyHandler, true);
-      suppressHandleUntil = Date.now() + 200;
+      suppressHandleUntil = Date.now() + 800;
       suppressObserver = true;
-      setTimeout(() => { suppressObserver = false; }, 300);
+      setTimeout(() => { suppressObserver = false; }, 1000);
 
-      const modalNodes = document.querySelectorAll('div[data-v-70e7ded6-s], .modal__content, .modal');
+      const modalNodes = document.querySelectorAll('div[data-v-70e7ded6-s], .modal__content, .modal, [role="dialog"]');
       modalNodes.forEach((node) => {
         if (node) node.dataset.wawSuppress = 'true';
       });
@@ -841,10 +740,10 @@
         modalNodes.forEach((node) => {
           if (node) delete node.dataset.wawSuppress;
         });
-      }, 300);
+      }, 800);
 
       const closeWaterlooModal = () => {
-        console.log('[WAW] closeWaterlooModal: modals', document.querySelectorAll('div[data-v-70e7ded6-s], .modal__content, .modal').length);
+        console.log('[WAW] closeWaterlooModal: modals', document.querySelectorAll('div[data-v-70e7ded6-s], .modal__content, .modal, [role="dialog"]').length);
         const closeButtons = document.querySelectorAll(
           'div[data-v-70e7ded6-s] button[aria-label="Close"], .modal__close, button.close, [data-dismiss="modal"]'
         );
@@ -858,7 +757,7 @@
         });
 
         if (!clicked) {
-          const modal = document.querySelector('div[data-v-70e7ded6-s], .modal__content, .modal');
+          const modal = document.querySelector('div[data-v-70e7ded6-s], .modal__content, .modal, [role="dialog"]');
           const modalClose = modal?.querySelector?.('button[aria-label="Close"], .modal__close, button.close');
           if (modalClose) {
             modalClose.click();
@@ -872,7 +771,7 @@
           if (backdrop) {
             backdrop.click();
           } else {
-            const modal = document.querySelector('div[data-v-70e7ded6-s], .modal__content, .modal');
+            const modal = document.querySelector('div[data-v-70e7ded6-s], .modal__content, .modal, [role="dialog"]');
             if (modal) {
               modal.dispatchEvent(new MouseEvent('click', { bubbles: true }));
             }
@@ -885,22 +784,46 @@
       setTimeout(closeWaterlooModal, 120);
       setTimeout(closeWaterlooModal, 300);
 
-      // Hard-hide (NOT remove) any remaining modals/backdrops so WW's
-      // framework can still find and clean them up properly.
+      // Hard-hide any remaining modals/backdrops as a last resort
       const hardHide = () => {
         console.log('[WAW] hardHide: backdrops', document.querySelectorAll('.modal-backdrop, .overlay').length);
         document.querySelectorAll('.modal-backdrop, .overlay').forEach((el) => {
-          if (!el || el.id === 'waw-overlay') return;
-          el.style.display = 'none';
-          el.style.pointerEvents = 'none';
+          if (!el) return;
+          el.remove();
         });
       };
       hardHide();
       setTimeout(hardHide, 180);
 
-      // Scroll restoration: use a reactive MutationObserver to immediately
-      // undo any scroll-locking that WW's framework re-applies after close.
+      // Debug scan for click blockers after close
+      const scanClickBlockers = () => {
+        const blockers = [];
+        document.querySelectorAll('body *').forEach((el) => {
+          const rect = el.getBoundingClientRect();
+          if (rect.width < 50 || rect.height < 50) return;
+          if (rect.top > 0 || rect.left > 0) return;
+          if (rect.width < window.innerWidth * 0.9 || rect.height < window.innerHeight * 0.9) return;
+          const style = getComputedStyle(el);
+          if (style.pointerEvents === 'none') return;
+          if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return;
+          blockers.push({ el, z: style.zIndex, pos: style.position });
+        });
+        if (blockers.length > 0) {
+          console.log('[WAW] Potential click blockers:', blockers.map(b => ({
+            tag: b.el.tagName,
+            id: b.el.id,
+            className: b.el.className,
+            zIndex: b.z,
+            position: b.pos
+          })));
+        }
+      };
+      setTimeout(scanClickBlockers, 200);
+      setTimeout(scanClickBlockers, 600);
+      
+      // Aggressive scroll restoration function
       const forceEnableScroll = () => {
+        // Reset body styles
         document.body.style.overflow = '';
         document.body.style.overflowX = '';
         document.body.style.overflowY = '';
@@ -911,12 +834,18 @@
         document.body.style.width = '';
         document.body.style.height = '';
         document.body.style.pointerEvents = '';
+        
+        // Reset html/documentElement styles
         document.documentElement.style.overflow = '';
         document.documentElement.style.overflowX = '';
         document.documentElement.style.overflowY = '';
         document.documentElement.style.position = '';
         document.documentElement.style.pointerEvents = '';
+        
+        // Remove any modal-related classes from body
         document.body.classList.remove('modal-open', 'overflow-hidden', 'waw-active', 'no-scroll');
+        
+        // Also check for any elements with overflow:hidden and remove it
         if (getComputedStyle(document.body).overflow === 'hidden') {
           document.body.style.setProperty('overflow', 'auto', 'important');
         }
@@ -924,30 +853,26 @@
           document.documentElement.style.setProperty('overflow', 'auto', 'important');
         }
       };
-
+      
       // Run immediately
       forceEnableScroll();
       
-      // Reactive scroll guard: watches for WW framework re-applying scroll lock
-      const scrollGuard = new MutationObserver(() => {
-        const bodyOverflow = document.body.style.overflow;
-        const htmlOverflow = document.documentElement.style.overflow;
-        const hasModalOpen = document.body.classList.contains('modal-open');
-        if (bodyOverflow === 'hidden' || htmlOverflow === 'hidden' || hasModalOpen) {
-          console.log('[WAW] scrollGuard: undoing scroll lock re-applied by WW');
-          forceEnableScroll();
-        }
-      });
-      scrollGuard.observe(document.body, { attributes: true, attributeFilter: ['style', 'class'] });
-      scrollGuard.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+      // Run multiple times with delays to catch any re-adds
+      setTimeout(forceEnableScroll, 50);
+      setTimeout(forceEnableScroll, 150);
+      setTimeout(forceEnableScroll, 300);
+      setTimeout(forceEnableScroll, 500);
       
-      // Disconnect the guard after 3 seconds — long enough for WW's async cleanup
-      setTimeout(() => {
-        scrollGuard.disconnect();
-        // One final check
+      // Keep checking for 2 seconds with an interval
+      let checks = 0;
+      const scrollInterval = setInterval(() => {
         forceEnableScroll();
-        console.log('[WAW] Scroll guard disconnected');
-      }, 3000);
+        checks++;
+        if (checks >= 10) {
+          clearInterval(scrollInterval);
+          console.log('[WAW] Scroll restoration complete');
+        }
+      }, 200);
       
       console.log('[WAW] closeAll() finished setup');
     };
@@ -958,11 +883,6 @@
       document.body.classList.remove('waw-active');
       isActive = false;
       document.removeEventListener('keydown', keyHandler, true);
-      
-      // Force-reset isNavigating so rapid keypresses aren't blocked
-      // by a previous navigation's pending pollForModal callback.
-      // The navGeneration counter ensures stale callbacks are ignored.
-      isNavigating = false;
       
       // Aggressively reset scroll
       const resetScroll = () => {
@@ -979,6 +899,15 @@
       
       // Use our own navigation
       navigateToJob(dir);
+    };
+
+    const toggleCurrentShortlist = async () => {
+      if (currentJobId && window.WAWNavigator?.toggleShortlistJob) {
+        await window.WAWNavigator.toggleShortlistJob(currentJobId);
+        updateSavedBadge(isJobSaved(currentJobId));
+        return;
+      }
+      clickCurrentModalButton('create_new_folder');
     };
 
     const keyHandler = (e) => {
@@ -1002,17 +931,12 @@
       else if (e.key === 'ArrowUp') {
         e.preventDefault();
         e.stopImmediatePropagation();
-        // Toggle shortlist (star) for the current job
-        if (currentJobId && window.WAWNavigator?.toggleShortlistJob) {
-          window.WAWNavigator.toggleShortlistJob(currentJobId);
-        }
+        toggleCurrentShortlist();
       }
       else if (e.key === 's' || e.key === 'S' || e.key === 'w' || e.key === 'W') {
         e.preventDefault();
         e.stopImmediatePropagation();
-        if (currentJobId && window.WAWNavigator?.toggleShortlistJob) {
-          window.WAWNavigator.toggleShortlistJob(currentJobId);
-        }
+        toggleCurrentShortlist();
       }
     };
 
@@ -1107,13 +1031,9 @@
     };
     
     // Action buttons - trigger buttons in the CURRENT WaterlooWorks modal
-    document.getElementById('waw-save').onclick = () => {
+    document.getElementById('waw-save').onclick = async () => {
       console.log('[WAW] Save button clicked');
-      clickCurrentModalButton('create_new_folder');
-      // Mark job as saved and update badge
-      if (currentJobId) {
-        markJobAsSaved(currentJobId);
-      }
+      await toggleCurrentShortlist();
     };
     
     document.getElementById('waw-apply').onclick = () => {
@@ -1255,8 +1175,8 @@
         if (node.nodeType !== 1) continue;
         const modal = node.querySelector?.('.modal__content') || (node.classList?.contains('modal__content') ? node : null);
         if (modal) {
-          console.log('[WAW] New modal detected, isActive:', isActive, 'navIntent:', Date.now() < navigationIntentUntil);
-          if (!isActive && Date.now() >= suppressHandleUntil && Date.now() < navigationIntentUntil && modal.dataset?.wawSuppress !== 'true') {
+          console.log('[WAW] New modal detected, isActive:', isActive);
+          if (!isActive && Date.now() >= suppressHandleUntil && modal.dataset?.wawSuppress !== 'true') {
             handleModal(modal);
           }
         }
@@ -1285,14 +1205,7 @@
     if (!link) return;
     const row = link.closest('tr');
     if (!row) return;
-    // Clear all suppress flags — a genuine user click should always open the modal
-    suppressHandleUntil = 0;
-    suppressObserver = false;
-    navigationIntentUntil = Date.now() + 2000;
-    // Also clear wawSuppress from any modal nodes
-    document.querySelectorAll('[data-waw-suppress]').forEach((node) => {
-      delete node.dataset.wawSuppress;
-    });
+    navigationIntentUntil = Date.now() + 1200;
   }, true);
 
   const existing = document.querySelector('.modal__content.height--100');

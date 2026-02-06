@@ -17,63 +17,51 @@
     </header>
 
     <main class="popup-main">
-      <!-- Quick toggle -->
-      <div class="quick-toggle">
+      <section class="quick-toggle">
         <span>Extension Enabled</span>
-        <label class="toggle">
+        <label class="toggle" for="quick-enable">
           <input type="checkbox" id="quick-enable" checked>
           <span class="toggle-slider"></span>
         </label>
-      </div>
+      </section>
 
-      <!-- Quick actions -->
-      <div class="quick-actions">
+      <section class="quick-actions">
         <a href="https://waterlooworks.uwaterloo.ca/myAccount/dashboard.htm" target="_blank" class="action-btn">
-          <span class="action-icon">📊</span>
-          <span>Dashboard</span>
+          <span class="action-label">Dashboard</span>
         </a>
-        <a href="https://waterlooworks.uwaterloo.ca/myAccount/co-op/coop-postings.htm" target="_blank" class="action-btn">
-          <span class="action-icon">💼</span>
-          <span>Postings</span>
+        <a href="https://waterlooworks.uwaterloo.ca/myAccount/co-op/full/jobs.htm" target="_blank" class="action-btn">
+          <span class="action-label">Full Cycle</span>
         </a>
-        <a href="https://waterlooworks.uwaterloo.ca/myAccount/co-op/coopApplications.htm" target="_blank" class="action-btn">
-          <span class="action-icon">📝</span>
-          <span>Applications</span>
+        <a href="https://waterlooworks.uwaterloo.ca/myAccount/co-op/full/applications.htm" target="_blank" class="action-btn">
+          <span class="action-label">Applications</span>
         </a>
-        <a href="https://waterlooworks.uwaterloo.ca/myAccount/messages.htm" target="_blank" class="action-btn">
-          <span class="action-icon">✉️</span>
-          <span>Messages</span>
+        <a href="https://waterlooworks.uwaterloo.ca/myAccount/co-op/direct/jobs.htm" target="_blank" class="action-btn">
+          <span class="action-label">Employer-Student</span>
         </a>
-      </div>
+      </section>
 
-      <!-- Shortlist folder -->
-      <div class="shortlist-section">
-        <div class="shortlist-label">Shortlist Folder</div>
+      <section class="shortlist-section">
+        <div class="section-title">Shortlist Folder</div>
         <div class="shortlist-controls">
           <select id="shortlist-folder-select" class="shortlist-select">
-            <option value="" disabled>-- Select a folder --</option>
+            <option value="" disabled selected>Open a posting to select a folder</option>
           </select>
-          <button id="shortlist-folder-refresh" class="shortlist-refresh" title="Refresh folders from WaterlooWorks">&#x21bb;</button>
+          <button id="shortlist-folder-refresh" class="shortlist-refresh" title="Refresh folder list" aria-label="Refresh folder list">Refresh</button>
+        </div>
+        <div class="shortlist-actions">
+          <button id="shortlist-folder-apply" class="shortlist-apply">Apply Selection</button>
         </div>
         <div id="shortlist-status" class="shortlist-status"></div>
-      </div>
+      </section>
 
-      <!-- Theme toggle -->
-      <div class="theme-section">
-        <span>Dark Mode</span>
-        <label class="toggle">
-          <input type="checkbox" id="dark-mode-toggle">
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
+      <section class="controls-section">
+        <div class="section-title">Controls</div>
+        <div class="control-row"><span class="key">&larr;</span><span>Previous posting</span></div>
+        <div class="control-row"><span class="key">&rarr;</span><span>Next posting</span></div>
+        <div class="control-row"><span class="key">&uarr;</span><span>Shortlist / unshortlist current posting</span></div>
+        <div class="control-row"><span class="key">&darr;</span><span>No action assigned</span></div>
+      </section>
     </main>
-
-    <footer class="popup-footer">
-      <button id="open-options" class="options-btn">
-        <span>⚙️</span>
-        <span>Options</span>
-      </button>
-    </footer>
   </div>
 
   <script src="popup.js"></script>

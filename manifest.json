@@ -30,51 +30,37 @@
 
   "content_scripts": [
     {
-      "matches": ["https://waterlooworks.uwaterloo.ca/*"],
+      "matches": [
+        "https://waterlooworks.uwaterloo.ca/myAccount/co-op/direct/jobs.htm*",
+        "https://waterlooworks.uwaterloo.ca/myAccount/co-op/full/jobs.htm*"
+      ],
       "css": [
         "ui/layout/modal-hide.css"
       ],
       "run_at": "document_start"
     },
     {
-      "matches": ["https://waterlooworks.uwaterloo.ca/*"],
+      "matches": [
+        "https://waterlooworks.uwaterloo.ca/myAccount/co-op/direct/jobs.htm*",
+        "https://waterlooworks.uwaterloo.ca/myAccount/co-op/full/jobs.htm*"
+      ],
       "js": [
         "utils/storage.js",
-        "utils/selectors.js",
         "utils/compatibility.js",
-        "content/feature-flags.js",
-        "content/observers.js",
-        "content/dom-hooks.js",
         "content/navigator.js",
         "content/job-info-rearranger.js",
-        "content/modal-redesign.js",
-        "content/inject.js"
+        "content/modal-redesign.js"
       ],
       "run_at": "document_end"
     }
   ],
 
-  "options_page": "options/options.html",
-
   "permissions": [
-    "storage",
-    "contextMenus"
+    "storage"
   ],
 
   "host_permissions": [
     "https://waterlooworks.uwaterloo.ca/*",
     "https://autocomplete.clearbit.com/*"
-  ],
-
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "ui/themes/*.css",
-        "ui/layout/*.css",
-        "ui/components/*.css",
-        "icons/*.png"
-      ],
-      "matches": ["https://waterlooworks.uwaterloo.ca/*"]
-    }
   ]
 }

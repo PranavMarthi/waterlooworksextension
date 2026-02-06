@@ -24,10 +24,11 @@
   let isClosingModal = false;
   let folderObserver = null;
   let linkSanitizeObserver = null;
+  let isDefaultFolderPromptVisible = false;
 
   const DEFAULT_SETTINGS = {
     newJobDaysThreshold: 7,
-    shortlistFolderName: 'shortlist'
+    shortlistFolderName: ''
   };
 
   const FOLDER_MENU_SELECTORS = [
@@ -39,10 +40,33 @@
     '.mat-menu-panel',
     '.mat-select-panel',
     '.MuiMenu-paper',
-    '.menuable__content__active'
+    '.menuable__content__active',
+    '.sidebar--action.is--visible',
+    '.sidebar--action.is--visible.right',
+    '.sidebar--action.sidebar--updated.is--visible.right'
   ];
 
+  const FOLDER_SIDEBAR_SELECTORS = [
+    '.sidebar--action.sidebar--updated.is--visible.right',
+    '.sidebar--action.is--visible.right',
+    '.sidebar--action.is--visible'
+  ];
+
+  const FOLDER_STEALTH_ATTR = 'data-waw-folder-stealth';
+  const FOLDER_STEALTH_STYLE_ID = 'waw-folder-stealth-style';
+
   const FOLDER_ICON_NAMES = ['create_new_folder', 'folder', 'folder_open', 'folder_special'];
+
+  const SYSTEM_FOLDER_NAMES = new Set([
+    'save',
+    'saved',
+    'my applications',
+    'my program',
+    'remove from search',
+    'removed from search',
+    'select all',
+    'select row'
+  ]);
 
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
@@ -59,29 +83,293 @@
   }
 
   function isCreateFolderItem(text) {
-    const lower = normalizeText(text).toLowerCase();
+    const lower = cleanFolderName(text).toLowerCase();
     return lower === 'create new folder' ||
            lower === 'new folder' ||
            lower === 'create folder' ||
            lower === 'add folder' ||
-           lower === 'create a folder' ||
-           lower === 'create a new folder';
+           lower === 'create a folder';
   }
 
-  const SYSTEM_FOLDER_NAMES = [
-    'remove from search',
-    'removed from search',
-    'my applications',
-    'save'
-  ];
-
-  function isSystemFolderItem(text) {
-    const lower = normalizeText(text).toLowerCase();
-    return SYSTEM_FOLDER_NAMES.includes(lower);
+  function cleanFolderName(text) {
+    let value = normalizeText(text);
+    if (!value) return '';
+    value = value
+      .replace(/toggle_?on\s*toggle_?off/gi, ' ')
+      .replace(/toggle_?on|toggle_?off/gi, ' ')
+      .replace(/^[/\\>\-]+\s*/, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return value;
   }
 
-  function isExcludedFolderItem(text) {
-    return isCreateFolderItem(text) || isSystemFolderItem(text);
+  function getTextWithoutIcons(el) {
+    if (!el) return '';
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('i, svg, [class*="icon"], [aria-hidden="true"]').forEach((iconEl) => iconEl.remove());
+    return cleanFolderName(clone.textContent || '');
+  }
+
+  function isExcludedFolderName(text) {
+    const lower = cleanFolderName(text).toLowerCase();
+    return !lower || isCreateFolderItem(lower) || SYSTEM_FOLDER_NAMES.has(lower);
+  }
+
+  function isLikelyFolderSidebar(sidebar) {
+    if (!sidebar || !isElementVisible(sidebar)) return false;
+    const text = normalizeText(sidebar.textContent).toLowerCase();
+    if (!text.includes('my jobs folder')) return false;
+    return !!sidebar.querySelector('input[type="checkbox"]');
+  }
+
+  function getVisibleFolderSidebars() {
+    const sidebars = new Set();
+    FOLDER_SIDEBAR_SELECTORS.forEach((selector) => {
+      document.querySelectorAll(selector).forEach((el) => {
+        if (isLikelyFolderSidebar(el)) {
+          sidebars.add(el);
+        }
+      });
+    });
+    return Array.from(sidebars);
+  }
+
+  function getAllVisibleFolderUiContainers() {
+    const all = new Set();
+    getVisibleFolderMenus().forEach((el) => all.add(el));
+    getVisibleFolderPopups().forEach((el) => all.add(el));
+    getVisibleFolderSidebars().forEach((el) => all.add(el));
+    return Array.from(all);
+  }
+
+  function ensureFolderStealthStyle() {
+    if (document.getElementById(FOLDER_STEALTH_STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = FOLDER_STEALTH_STYLE_ID;
+    style.textContent = `
+      html[${FOLDER_STEALTH_ATTR}="true"] .sidebar--action.is--visible,
+      html[${FOLDER_STEALTH_ATTR}="true"] .sidebar--action.is--visible.right,
+      html[${FOLDER_STEALTH_ATTR}="true"] .sidebar--action.sidebar--updated.is--visible.right,
+      html[${FOLDER_STEALTH_ATTR}="true"] .menuable__content__active,
+      html[${FOLDER_STEALTH_ATTR}="true"] .v-menu__content,
+      html[${FOLDER_STEALTH_ATTR}="true"] .dropdown-menu,
+      html[${FOLDER_STEALTH_ATTR}="true"] .menu {
+        opacity: 0 !important;
+        pointer-events: none !important;
+        transform: translate3d(-9999px, -9999px, 0) !important;
+        transition: none !important;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(style);
+  }
+
+  function setFolderStealthMode(enabled) {
+    ensureFolderStealthStyle();
+    if (enabled) {
+      document.documentElement.setAttribute(FOLDER_STEALTH_ATTR, 'true');
+    } else {
+      document.documentElement.removeAttribute(FOLDER_STEALTH_ATTR);
+    }
+  }
+
+  function findSidebarActionButton(sidebar, mode = 'close') {
+    if (!sidebar) return null;
+    const buttons = Array.from(sidebar.querySelectorAll('button, input[type="button"], input[type="submit"], a'));
+    if (mode === 'save') {
+      return buttons.find((btn) => {
+        if (!isElementVisible(btn)) return false;
+        const text = normalizeText(btn.textContent || btn.value || '').toLowerCase();
+        return text === 'save';
+      }) || null;
+    }
+
+    return buttons.find((btn) => {
+      if (!isElementVisible(btn)) return false;
+      const text = normalizeText(btn.textContent || btn.value || '').toLowerCase();
+      if (text === 'close' || text === 'cancel' || text === 'done') return true;
+      if (String(btn.className || '').toLowerCase().includes('modal__btn--close')) return true;
+      const iconText = normalizeText(btn.querySelector?.('i.material-icons')?.textContent || '').toLowerCase();
+      return iconText === 'close';
+    }) || null;
+  }
+
+  function isFolderItemToggleable(item) {
+    if (!item) return false;
+    if (item.querySelector('input[type="checkbox"], [role="switch"], [aria-checked]')) {
+      return true;
+    }
+    const raw = normalizeText(item.textContent).toLowerCase();
+    if (/toggle_?on|toggle_?off/.test(raw)) return true;
+    const className = String(item.className || '').toLowerCase();
+    return className.includes('checkbox') || className.includes('toggle') || className.includes('switch');
+  }
+
+  function getFolderItemName(item) {
+    if (!item) return '';
+    const text = getTextWithoutIcons(item) || cleanFolderName(item.textContent || '');
+    return cleanFolderName(text);
+  }
+
+  function getFolderItemState(item) {
+    if (!item) return null;
+
+    if (item.matches?.('input[type="checkbox"]')) {
+      return !!item.checked;
+    }
+
+    const nestedCheckbox = item.querySelector?.('input[type="checkbox"]');
+    if (nestedCheckbox) return !!nestedCheckbox.checked;
+
+    const relatedCheckbox = item.id
+      ? document.querySelector(`input[type="checkbox"][id="${item.id}"]`)
+      : item.closest('label')?.querySelector('input[type="checkbox"]');
+    if (relatedCheckbox) return !!relatedCheckbox.checked;
+
+    const ariaChecked = item.getAttribute?.('aria-checked') ?? item.closest('[aria-checked]')?.getAttribute?.('aria-checked');
+    if (ariaChecked === 'true') return true;
+    if (ariaChecked === 'false') return false;
+
+    const className = String(item.className || '').toLowerCase();
+    if (/(^|\b)(selected|active|checked|is-checked|v-list-item--active|mat-selected|mui-selected)(\b|$)/.test(className)) {
+      return true;
+    }
+
+    const raw = normalizeText(item.textContent).toLowerCase();
+    if (raw.includes('toggle_on')) return true;
+    if (raw.includes('toggle_off')) return false;
+    return null;
+  }
+
+  async function closeFolderMenus({ preferSave = false } = {}) {
+    const hasFolderUI = () => getAllVisibleFolderUiContainers().length > 0;
+    if (!hasFolderUI()) return;
+
+    for (let attempt = 0; attempt < 4 && hasFolderUI(); attempt++) {
+      const sidebars = getVisibleFolderSidebars();
+      for (const sidebar of sidebars) {
+        if (preferSave) {
+          const saveButton = findSidebarActionButton(sidebar, 'save');
+          if (saveButton) {
+            safeClick(saveButton);
+            await sleep(140);
+          }
+        }
+        const closeButton = findSidebarActionButton(sidebar, 'close');
+        if (closeButton) {
+          safeClick(closeButton);
+          await sleep(140);
+        }
+      }
+
+      if (!hasFolderUI()) break;
+
+      const trigger = findFolderMenuTrigger(document.querySelector('div[data-v-70e7ded6-s]') || document);
+      if (trigger) {
+        safeClick(trigger);
+        await sleep(120);
+        if (!hasFolderUI()) break;
+      }
+
+      const popups = getVisibleFolderPopups();
+      for (const popup of popups) {
+        const closeButton = Array.from(
+          popup.querySelectorAll('button[aria-label="Close"], button[aria-label*="close" i], .modal__close, .modal__btn--close, button.close, [data-dismiss="modal"], button, a, [role="button"]')
+        ).find((btn) => {
+          if (!isElementVisible(btn)) return false;
+          const label = normalizeText(btn.textContent || btn.getAttribute('aria-label') || btn.value).toLowerCase();
+          if (label === 'close' || label === 'cancel' || label === 'done' || label === 'save') return true;
+          if (String(btn.className || '').toLowerCase().includes('modal__btn--close')) return true;
+          const iconText = normalizeText(btn.querySelector?.('i.material-icons')?.textContent || '').toLowerCase();
+          return iconText === 'close' || iconText === 'done' || iconText === 'check';
+        });
+        if (closeButton) {
+          safeClick(closeButton);
+          await sleep(120);
+          if (!hasFolderUI()) break;
+        }
+      }
+
+      if (!hasFolderUI()) break;
+
+      document.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, clientX: 1, clientY: 1 }));
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, clientX: 1, clientY: 1 }));
+      document.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: 1, clientY: 1 }));
+      await sleep(100);
+
+      const backdrop = document.querySelector('.v-overlay__scrim, .modal-backdrop, .overlay, .v-overlay');
+      if (backdrop && isElementVisible(backdrop)) {
+        safeClick(backdrop);
+        await sleep(100);
+      }
+
+      const target = document.activeElement || document.body;
+      target.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      target.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      document.dispatchEvent(new KeyboardEvent('keyup', { key: 'Escape', bubbles: true }));
+      await sleep(120);
+    }
+
+    if (hasFolderUI()) {
+      const forced = getAllVisibleFolderUiContainers();
+      forced.forEach((el) => {
+        el.dataset.wawForceHiddenFolderUi = 'true';
+        el.style.setProperty('display', 'none', 'important');
+        el.style.setProperty('visibility', 'hidden', 'important');
+        el.style.setProperty('opacity', '0', 'important');
+        el.style.setProperty('pointer-events', 'none', 'important');
+      });
+    }
+
+    if (!hasFolderUI()) {
+      restoreStealthFolderUI();
+      setFolderStealthMode(false);
+    }
+  }
+
+  async function setFolderSelectionRequired(required) {
+    try {
+      await chrome.storage.sync.set({ shortlistFolderSelectionRequired: !!required });
+    } catch (_) {
+      // no-op
+    }
+  }
+
+  async function ensureModalOpenForJob(jobId = null, timeout = 2200) {
+    if (isModalOpen()) {
+      if (!jobId) return true;
+      const modalJobId = getCurrentModalJobId();
+      if (!modalJobId || String(modalJobId) === String(jobId)) return true;
+      closeModal();
+      await sleep(140);
+    }
+
+    getAllJobLinks();
+    if (jobLinks.length === 0) return false;
+
+    let targetLink = null;
+    if (jobId) {
+      targetLink = jobLinks.find((link) => {
+        const row = link.closest('tr');
+        return row && String(getJobIdFromRow(row)) === String(jobId);
+      }) || null;
+    }
+    if (!targetLink) {
+      targetLink = jobLinks[0];
+    }
+
+    if (!targetLink) return false;
+    safeClick(targetLink);
+    return waitForModalOpen(timeout);
+  }
+
+  function collectVisibleFolderNames() {
+    let extracted = [];
+    const menus = getVisibleFolderMenus();
+    menus.forEach((menu) => {
+      extracted = extracted.concat(extractFolderNamesFromMenu(menu));
+    });
+    return uniqueList(extracted);
   }
 
   function uniqueList(list) {
@@ -90,10 +378,10 @@
     list.forEach((item) => {
       const value = normalizeText(item);
       if (!value) return;
-      const key = value.toLowerCase();
+      const key = cleanFolderName(value).toLowerCase();
       if (seen.has(key)) return;
       seen.add(key);
-      result.push(value);
+      result.push(cleanFolderName(value));
     });
     return result;
   }
@@ -148,7 +436,8 @@
     try {
       if (window.AzureStorage?.getSettings) {
         const settings = await window.AzureStorage.getSettings(['shortlistFolders']);
-        return Array.isArray(settings.shortlistFolders) ? settings.shortlistFolders : [];
+        return uniqueList(Array.isArray(settings.shortlistFolders) ? settings.shortlistFolders : [])
+          .filter((name) => !isExcludedFolderName(name));
       }
     } catch (e) {
       // fall through to chrome.storage
@@ -156,20 +445,21 @@
 
     try {
       const result = await chrome.storage.sync.get({ shortlistFolders: [] });
-      return Array.isArray(result.shortlistFolders) ? result.shortlistFolders : [];
+      return uniqueList(Array.isArray(result.shortlistFolders) ? result.shortlistFolders : [])
+        .filter((name) => !isExcludedFolderName(name));
     } catch (e) {
       return [];
     }
   }
 
   function folderListContains(list, name) {
-    const target = normalizeText(name).toLowerCase();
+    const target = cleanFolderName(name).toLowerCase();
     if (!target) return false;
-    return (list || []).some((item) => normalizeText(item).toLowerCase() === target);
+    return (list || []).some((item) => cleanFolderName(item).toLowerCase() === target);
   }
 
   async function saveFolderList(list) {
-    const folders = uniqueList(list);
+    const folders = uniqueList(list).filter((name) => !isExcludedFolderName(name));
     if (window.AzureStorage?.saveSettings) {
       await window.AzureStorage.saveSettings({ shortlistFolders: folders });
       return;
@@ -187,14 +477,105 @@
     return menus;
   }
 
+  function isLikelyFolderPopup(container) {
+    if (!container || container.matches?.('div[data-v-70e7ded6-s]')) return false;
+    if (!isElementVisible(container)) return false;
+
+    const text = normalizeText(container.textContent).toLowerCase();
+    if (!text) return false;
+
+    if (/my jobs folder|create new folder|create a new folder|select all|select row|remove from search|toggle_?on|toggle_?off/.test(text)) {
+      return true;
+    }
+
+    const hasToggles = !!container.querySelector('input[type="checkbox"], [role="switch"], [aria-checked]');
+    const hasFolderAction = !!container.querySelector('button[aria-label*="folder" i], a[aria-label*="folder" i], i.material-icons');
+    const hasSaveLike = Array.from(container.querySelectorAll('button, input[type="button"], input[type="submit"], a'))
+      .some((btn) => {
+        const label = normalizeText(btn.textContent || btn.value).toLowerCase();
+        return label === 'save' || label === 'close' || label === 'cancel' || label === 'done';
+      });
+
+    return hasToggles && (hasSaveLike || hasFolderAction);
+  }
+
+  function restoreForceHiddenFolderUI() {
+    document.querySelectorAll('[data-waw-force-hidden-folder-ui="true"]').forEach((el) => {
+      el.style.removeProperty('display');
+      el.style.removeProperty('visibility');
+      el.style.removeProperty('opacity');
+      el.style.removeProperty('pointer-events');
+      el.style.removeProperty('transform');
+      el.style.removeProperty('transition');
+      delete el.dataset.wawForceHiddenFolderUi;
+    });
+  }
+
+  function hideFolderUiForAutomation() {
+    setFolderStealthMode(true);
+    const targets = getAllVisibleFolderUiContainers();
+    targets.forEach((el) => {
+      if (el.dataset.wawStealthFolderUi === 'true') return;
+      el.dataset.wawStealthFolderUi = 'true';
+      el.style.setProperty('opacity', '0', 'important');
+      el.style.setProperty('pointer-events', 'none', 'important');
+      el.style.setProperty('transform', 'translate3d(-9999px, -9999px, 0)', 'important');
+      el.style.setProperty('transition', 'none', 'important');
+    });
+  }
+
+  function restoreStealthFolderUI() {
+    document.querySelectorAll('[data-waw-stealth-folder-ui="true"]').forEach((el) => {
+      el.style.removeProperty('opacity');
+      el.style.removeProperty('pointer-events');
+      el.style.removeProperty('transform');
+      el.style.removeProperty('transition');
+      delete el.dataset.wawStealthFolderUi;
+    });
+    if (getAllVisibleFolderUiContainers().length === 0) {
+      setFolderStealthMode(false);
+    }
+  }
+
+  function getVisibleFolderPopups() {
+    const popups = new Set();
+    const popupSelectors = [
+      '[role="dialog"]',
+      '.modal',
+      '.modal__content',
+      '.v-dialog',
+      '.v-overlay__content',
+      '.v-menu__content',
+      '.menuable__content__active',
+      '.dropdown-menu',
+      '.menu',
+      '.sidebar--action.is--visible',
+      '.sidebar--action.is--visible.right',
+      '.sidebar--action.sidebar--updated.is--visible.right'
+    ];
+
+    popupSelectors.forEach((selector) => {
+      document.querySelectorAll(selector).forEach((el) => {
+        if (isLikelyFolderPopup(el)) {
+          popups.add(el);
+        }
+      });
+    });
+
+    return Array.from(popups);
+  }
+
   function extractFolderNamesFromMenu(menu) {
-    const items = menu.querySelectorAll('li, button, a, [role="menuitem"], [role="option"], div');
+    const items = Array.from(menu.querySelectorAll('li, [role="menuitem"], [role="option"], button, a, label'));
+    const hasToggleRows = items.some((item) => isFolderItemToggleable(item));
     const names = [];
     items.forEach((item) => {
-      const text = normalizeText(item.textContent);
-      if (!text) return;
-      if (isExcludedFolderItem(text)) return;
-      if (text.length > 40) return;
+      const raw = normalizeText(item.textContent);
+      const text = getFolderItemName(item);
+      if (!text || text.length > 60) return;
+      if (hasToggleRows && !isFolderItemToggleable(item)) return;
+      if (isExcludedFolderName(text)) return;
+      if (!raw && !text) return;
       names.push(text);
     });
     return names;
@@ -206,124 +587,12 @@
     checkboxes.forEach((checkbox) => {
       const label = checkbox.id ? container.querySelector(`label[for="${checkbox.id}"]`) : null;
       const parent = checkbox.closest('li, .folder, .tree-node, .item, .list-item, .checkbox, .form-check') || checkbox.parentElement;
-      let text = normalizeText(label?.textContent || parent?.textContent || '');
-      if (!text || text.length > 40) return;
-      if (isExcludedFolderItem(text)) return;
+      let text = cleanFolderName(getTextWithoutIcons(label || parent) || label?.textContent || parent?.textContent || '');
+      if (!text || text.length > 60) return;
+      if (isExcludedFolderName(text)) return;
       names.push(text);
     });
     return names;
-  }
-
-  /**
-   * Find the WaterlooWorks "My Jobs Folder" dialog and return it, or null.
-   * The dialog has a heading containing "My Jobs Folder" and toggle/switch items.
-   */
-  function findJobFolderDialog() {
-    // Strategy 1: Look for a visible dialog/panel with "My Jobs Folder" in a heading
-    const allContainers = document.querySelectorAll(
-      '[role="dialog"], .modal, .modal__content, .v-dialog, .v-card, .v-sheet, .sidebar, .drawer, .panel, .card, [class*="dialog"], [class*="modal"], [class*="drawer"]'
-    );
-    for (const container of allContainers) {
-      if (!isElementVisible(container)) continue;
-      const textContent = container.textContent || '';
-      if (/my jobs folder/i.test(textContent)) {
-        console.log('[WAW] Found "My Jobs Folder" dialog');
-        return container;
-      }
-    }
-
-    // Strategy 2: Look for any visible element whose heading/title contains "My Jobs Folder"
-    const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6, .title, .header, [class*="title"], [class*="header"]');
-    for (const heading of headings) {
-      if (!isElementVisible(heading)) continue;
-      if (/my jobs folder/i.test(normalizeText(heading.textContent))) {
-        // Walk up to find the dialog container
-        const dialog = heading.closest('[role="dialog"], .modal, .modal__content, .v-dialog, .v-card, .v-sheet, .sidebar, .drawer, .panel, .card, [class*="dialog"], [class*="modal"]')
-          || heading.parentElement?.parentElement;
-        if (dialog) {
-          console.log('[WAW] Found "My Jobs Folder" dialog via heading');
-          return dialog;
-        }
-      }
-    }
-
-    return null;
-  }
-
-  /**
-   * Extract user-created folder names from the "My Jobs Folder" dialog.
-   * Filters out "Create a new folder", system folders, and the "Save" button.
-   */
-  function extractFoldersFromJobFolderDialog(dialog) {
-    if (!dialog) return [];
-    const names = [];
-
-    // The dialog contains toggle/switch items. Each toggle item typically has:
-    // - A label/text element
-    // - A checkbox/switch input
-    // Look for all text elements near toggle controls
-    const toggleItems = dialog.querySelectorAll(
-      '.v-input, .v-switch, .v-checkbox, [class*="switch"], [class*="toggle"], [class*="list-item"], [class*="list__tile"], li, .row, .form-check'
-    );
-
-    if (toggleItems.length > 0) {
-      for (const item of toggleItems) {
-        const text = normalizeText(item.textContent);
-        if (!text || text.length > 60) continue;
-        if (isExcludedFolderItem(text)) continue;
-        names.push(text);
-      }
-    }
-
-    // Fallback: look for checkboxes/inputs with labels
-    if (names.length === 0) {
-      const inputs = dialog.querySelectorAll('input[type="checkbox"], input[role="switch"], [role="switch"]');
-      for (const input of inputs) {
-        const label = input.id ? dialog.querySelector(`label[for="${input.id}"]`) : null;
-        const parent = input.closest('li, .v-input, [class*="switch"], [class*="toggle"], .row, .form-check') || input.parentElement;
-        const text = normalizeText(label?.textContent || parent?.textContent || '');
-        if (!text || text.length > 60) continue;
-        if (isExcludedFolderItem(text)) continue;
-        names.push(text);
-      }
-    }
-
-    // Last fallback: get all visible text nodes that look like folder names
-    if (names.length === 0) {
-      const allText = dialog.querySelectorAll('span, label, div, p');
-      for (const el of allText) {
-        // Only direct text, not deeply nested
-        if (el.children.length > 2) continue;
-        const text = normalizeText(el.textContent);
-        if (!text || text.length > 40 || text.length < 2) continue;
-        if (isExcludedFolderItem(text)) continue;
-        // Skip if it's a heading, button, or the job info header
-        if (el.closest('button, h1, h2, h3, h4, h5, h6, [class*="header"]')) continue;
-        names.push(text);
-      }
-    }
-
-    return uniqueList(names);
-  }
-
-  /**
-   * Close the "My Jobs Folder" dialog if it's open.
-   */
-  function closeJobFolderDialog() {
-    const dialog = findJobFolderDialog();
-    if (!dialog) return;
-    // Try the X/close button
-    const closeBtn = dialog.querySelector('button[aria-label="Close"], .close, [class*="close"], button:has(i.material-icons)');
-    if (closeBtn) {
-      const icon = closeBtn.querySelector('i.material-icons');
-      if (!icon || icon.textContent.trim() === 'close') {
-        closeBtn.click();
-        return;
-      }
-    }
-    // Try clicking outside / backdrop
-    const backdrop = document.querySelector('.v-overlay__scrim, .modal-backdrop, .overlay');
-    if (backdrop) backdrop.click();
   }
 
   function findFolderContainers() {
@@ -345,7 +614,10 @@
 
   function findFolderMenuItems(menu) {
     return Array.from(menu.querySelectorAll('li, button, a, [role="menuitem"], [role="option"]'))
-      .filter((item) => normalizeText(item.textContent));
+      .filter((item) => {
+        const name = getFolderItemName(item);
+        return !!name && !isExcludedFolderName(name);
+      });
   }
 
   function findFolderMenuItemByName(name) {
@@ -355,7 +627,7 @@
     for (const menu of menus) {
       const items = findFolderMenuItems(menu);
       for (const item of items) {
-        const text = normalizeText(item.textContent).toLowerCase();
+        const text = getFolderItemName(item).toLowerCase();
         if (text === target) return item;
       }
     }
@@ -363,7 +635,7 @@
     const candidates = Array.from(document.querySelectorAll('label, button, a, li, div, span'));
     for (const candidate of candidates) {
       if (!isElementVisible(candidate)) continue;
-      const text = normalizeText(candidate.textContent).toLowerCase();
+      const text = getFolderItemName(candidate).toLowerCase();
       if (text !== target) continue;
       const checkbox = candidate.querySelector('input[type="checkbox"]') ||
         candidate.closest('li')?.querySelector('input[type="checkbox"]');
@@ -381,13 +653,13 @@
     for (const menu of menus) {
       const items = findFolderMenuItems(menu);
       for (const item of items) {
-        if (isCreateFolderItem(item.textContent)) return item;
+        if (isCreateFolderItem(getFolderItemName(item))) return item;
       }
     }
     const candidates = Array.from(document.querySelectorAll('label, button, a, li, div, span'));
     for (const candidate of candidates) {
       if (!isElementVisible(candidate)) continue;
-      if (isCreateFolderItem(candidate.textContent)) {
+      if (isCreateFolderItem(getFolderItemName(candidate))) {
         const clickable = candidate.closest('button, a, [role="menuitem"], [role="option"], [role="button"], label, li');
         return clickable || candidate;
       }
@@ -424,7 +696,22 @@
     return null;
   }
 
-  async function openFolderMenuForJob(jobId = null) {
+  async function openFolderMenuForJob(jobId = null, { silent = false } = {}) {
+    restoreForceHiddenFolderUI();
+    restoreStealthFolderUI();
+    if (silent) {
+      setFolderStealthMode(true);
+    } else {
+      setFolderStealthMode(false);
+    }
+
+    if (getAllVisibleFolderUiContainers().length > 0) {
+      if (silent) {
+        hideFolderUiForAutomation();
+      }
+      return true;
+    }
+
     let trigger = null;
 
     if (isModalOpen()) {
@@ -455,7 +742,13 @@
     if (trigger) {
       safeClick(trigger);
       await sleep(150);
+      if (silent) {
+        hideFolderUiForAutomation();
+      }
       return true;
+    }
+    if (silent) {
+      setFolderStealthMode(false);
     }
     return false;
   }
@@ -492,180 +785,132 @@
     return null;
   }
 
-  /**
-   * Wait for the "My Jobs Folder" dialog to appear after clicking the folder button.
-   * Returns the dialog element or null on timeout.
-   */
-  async function waitForJobFolderDialog(timeout = 2000) {
-    const start = Date.now();
-    while (Date.now() - start < timeout) {
-      const dialog = findJobFolderDialog();
-      if (dialog) return dialog;
-      await sleep(100);
-    }
-    return null;
-  }
-
-  /**
-   * Find the toggle/switch element for a specific folder name inside the dialog.
-   */
-  function findFolderToggleInDialog(dialog, name) {
-    if (!dialog) return null;
-    const target = normalizeText(name).toLowerCase();
-    if (!target) return null;
-
-    // Look for toggle items containing the folder name
-    const items = dialog.querySelectorAll(
-      '.v-input, .v-switch, .v-checkbox, [class*="switch"], [class*="toggle"], [class*="list-item"], [class*="list__tile"], li, .row, .form-check, label'
-    );
-    for (const item of items) {
-      const text = normalizeText(item.textContent).toLowerCase();
-      if (text === target || text.startsWith(target)) {
-        // Find the actual clickable input/switch inside
-        const input = item.querySelector('input[type="checkbox"], input[role="switch"], [role="switch"], .v-input--switch, .v-selection-control');
-        if (input) return input;
-        return item; // Click the item itself
-      }
-    }
-
-    // Fallback: search by text match
-    return findFolderMenuItemByName(name);
-  }
-
-  /**
-   * Find the Save button inside the folder dialog.
-   */
-  function findSaveButtonInDialog(dialog) {
-    if (!dialog) return null;
-    const buttons = dialog.querySelectorAll('button, input[type="button"], input[type="submit"]');
-    for (const btn of buttons) {
-      const text = normalizeText(btn.textContent || btn.value).toLowerCase();
-      if (text === 'save') return btn;
-    }
-    return null;
-  }
-
   const FolderManager = {
-    async getFolders({ forceOpen = false } = {}) {
-      let folders = [];
-      let openedJobModal = false;
-      let openedFolderDialog = false;
+    async getFolders({ forceOpen = false, allowAutoOpenModal = false, jobId = null } = {}) {
+      let folders = await getStoredFolders();
 
-      // Step 1: Check if the "My Jobs Folder" dialog is already open
-      let dialog = findJobFolderDialog();
-      if (dialog) {
-        folders = extractFoldersFromJobFolderDialog(dialog);
-        console.log('[WAW] Extracted folders from existing dialog:', folders);
-      }
-
-      // Step 2: If forceOpen and no folders yet, open the dialog
-      if (folders.length === 0 && forceOpen) {
-        // Ensure a job modal is open (needed to access the folder button)
-        if (!isModalOpen()) {
-          getAllJobLinks();
-          if (jobLinks[0]) {
-            safeClick(jobLinks[0]);
-            openedJobModal = await waitForModalOpen(2000);
-          }
+      if (!isModalOpen()) {
+        if (!allowAutoOpenModal) {
+          return folders;
         }
-
-        // Click the folder button to open the dialog
-        const opened = await openFolderMenuForJob();
-        if (opened) {
-          await sleep(300);
-          // Wait for the "My Jobs Folder" dialog to appear
-          dialog = await waitForJobFolderDialog(2000);
-          if (dialog) {
-            openedFolderDialog = true;
-            folders = extractFoldersFromJobFolderDialog(dialog);
-            console.log('[WAW] Extracted folders from forced dialog:', folders);
-          }
-        }
-
-        // If targeted extraction failed, fall back to generic approach
-        if (folders.length === 0) {
-          getVisibleFolderMenus().forEach((menu) => {
-            folders = folders.concat(extractFolderNamesFromMenu(menu));
-          });
+        const opened = await ensureModalOpenForJob(jobId);
+        if (!opened) {
+          return folders;
         }
       }
 
-      // Step 3: Fall back to generic container/checkbox scanning
-      if (folders.length === 0) {
+      let scrapedFolders = collectVisibleFolderNames();
+
+      if (forceOpen) {
+        const openedMenu = await openFolderMenuForJob(jobId, { silent: true });
+        if (openedMenu) {
+          for (let i = 0; i < 6; i++) {
+            await sleep(120);
+            scrapedFolders = scrapedFolders.concat(collectVisibleFolderNames());
+          }
+        }
+      }
+
+      if (scrapedFolders.length === 0) {
         const containers = findFolderContainers();
         containers.forEach((container) => {
-          folders = folders.concat(extractFolderNamesFromCheckboxes(container));
+          scrapedFolders = scrapedFolders.concat(extractFolderNamesFromCheckboxes(container));
         });
+
+        if (scrapedFolders.length === 0) {
+          const labels = Array.from(document.querySelectorAll('label'))
+            .filter((label) => isElementVisible(label))
+            .filter((label) => {
+              const text = cleanFolderName(getTextWithoutIcons(label) || label.textContent);
+              if (!text || text.length > 60 || isExcludedFolderName(text)) return false;
+              const direct = label.querySelector('input[type="checkbox"]');
+              const byFor = label.htmlFor ? document.getElementById(label.htmlFor) : null;
+              return !!direct || (byFor && byFor.type === 'checkbox');
+            });
+          if (labels.length > 0) {
+            scrapedFolders = labels.map((label) => cleanFolderName(getTextWithoutIcons(label) || label.textContent));
+          }
+        }
       }
 
-      // Filter out any system/excluded items that slipped through
-      folders = uniqueList(folders).filter((name) => !isExcludedFolderItem(name));
+      await closeFolderMenus();
 
+      folders = uniqueList((folders || []).concat(scrapedFolders || []));
       if (folders.length > 0) {
         await saveFolderList(folders);
-      }
-
-      // Clean up: close the folder dialog and job modal if we opened them
-      if (openedFolderDialog) {
-        closeJobFolderDialog();
-        await sleep(150);
-      }
-      if (openedJobModal) {
-        const closeBtn = document.querySelector('div[data-v-70e7ded6-s] button[aria-label="Close"], .modal__close, button.close');
-        if (closeBtn) {
-          safeClick(closeBtn);
-        }
       }
       return folders;
     },
 
-    async selectFolder(name, jobId = null) {
-      const target = normalizeText(name);
+    async setFolderState(name, { jobId = null, desiredState = null } = {}) {
+      const target = cleanFolderName(name);
       if (!target) return { success: false, message: 'Missing folder name' };
 
-      // Open the folder dialog
-      await openFolderMenuForJob(jobId);
-      await sleep(300);
+      const opened = await openFolderMenuForJob(jobId, { silent: true });
+      if (!opened) return { success: false, message: 'Folder menu not available' };
 
-      // Wait for the "My Jobs Folder" dialog
-      let dialog = await waitForJobFolderDialog(2000);
-      if (dialog) {
-        // Find and click the toggle for this folder
-        const toggle = findFolderToggleInDialog(dialog, target);
-        if (toggle) {
-          safeClick(toggle);
-          await sleep(100);
-          // Click Save
-          const saveBtn = findSaveButtonInDialog(dialog);
-          if (saveBtn) {
-            safeClick(saveBtn);
-            console.log(`[WAW] Toggled folder "${target}" and clicked Save`);
-            return { success: true };
-          }
-          // Even without a Save button, the toggle click might be enough
-          console.log(`[WAW] Toggled folder "${target}" (no Save button found)`);
-          return { success: true };
-        }
-      }
+      await sleep(150);
 
-      // Fallback: try the old generic menu item approach
       let item = findFolderMenuItemByName(target);
       if (!item) {
         await sleep(150);
-        await openFolderMenuForJob(jobId);
+        await openFolderMenuForJob(jobId, { silent: true });
         await sleep(150);
         item = findFolderMenuItemByName(target);
       }
+
       if (!item) {
-        return { success: false, message: 'Folder not found in dialog' };
+        await closeFolderMenus({ preferSave: false });
+        return { success: false, message: 'Folder not found' };
       }
-      safeClick(item);
-      return { success: true };
+
+      const currentState = getFolderItemState(item);
+      if (desiredState === true && currentState === true) {
+        await closeFolderMenus({ preferSave: false });
+        return { success: true, changed: false };
+      }
+      if (desiredState === false && currentState === false) {
+        await closeFolderMenus({ preferSave: false });
+        return { success: true, changed: false };
+      }
+
+      const checkbox = item.matches?.('input[type="checkbox"]')
+        ? item
+        : item.querySelector?.('input[type="checkbox"]');
+      const clickTarget = checkbox?.closest('label') || item.closest?.('label') || item;
+
+      if (desiredState === null) {
+        safeClick(clickTarget);
+      } else {
+        let state = getFolderItemState(item);
+        for (let i = 0; i < 2 && state !== desiredState; i++) {
+          safeClick(clickTarget);
+          await sleep(120);
+          state = getFolderItemState(item);
+        }
+
+        if (state !== desiredState) {
+          await closeFolderMenus({ preferSave: false });
+          return { success: false, message: 'Could not update folder state' };
+        }
+      }
+
+      await sleep(140);
+      await closeFolderMenus({ preferSave: true });
+      return { success: true, changed: true };
+    },
+
+    async selectFolder(name, jobId = null) {
+      return this.setFolderState(name, { jobId, desiredState: null });
     },
 
     async createFolder(name) {
-      const target = normalizeText(name);
+      const target = cleanFolderName(name);
       if (!target) return { success: false, message: 'Missing folder name' };
+
+      if (!isModalOpen()) {
+        return { success: false, message: 'Open a posting before creating a folder' };
+      }
 
       await openFolderMenuForJob();
       await sleep(150);
@@ -693,7 +938,9 @@
         confirmButton.click();
       }
 
-      const existing = await this.getFolders({ forceOpen: true });
+      await closeFolderMenus();
+
+      const existing = await this.getFolders({ forceOpen: true, allowAutoOpenModal: true });
       const updated = uniqueList(existing.concat([target]));
       await saveFolderList(updated);
       return { success: true, folders: updated };
@@ -713,7 +960,7 @@
         ]);
         settings = {
           newJobDaysThreshold: loaded.newJobDaysThreshold || DEFAULT_SETTINGS.newJobDaysThreshold,
-          shortlistFolderName: loaded.shortlistFolderName || DEFAULT_SETTINGS.shortlistFolderName
+          shortlistFolderName: cleanFolderName(loaded.shortlistFolderName || DEFAULT_SETTINGS.shortlistFolderName)
         };
       } else {
         settings = DEFAULT_SETTINGS;
@@ -742,30 +989,260 @@
     }
   }
 
+  async function persistShortlistFolderName(name) {
+    const value = cleanFolderName(name);
+    settings = settings || {};
+    settings.shortlistFolderName = value;
+    if (window.AzureStorage?.saveSettings) {
+      await window.AzureStorage.saveSettings({ shortlistFolderName: value });
+      return;
+    }
+    await chrome.storage.sync.set({ shortlistFolderName: value });
+  }
+
+  function removeDefaultFolderPrompt() {
+    const docs = [document];
+    try {
+      if (window.top?.document && window.top.document !== document) {
+        docs.push(window.top.document);
+      }
+    } catch (_) {
+      // no-op
+    }
+
+    docs.forEach((doc) => {
+      const existing = doc.getElementById('waw-folder-prompt-overlay');
+      if (existing) {
+        existing.remove();
+      }
+    });
+    isDefaultFolderPromptVisible = false;
+  }
+
+  function populateDefaultFolderPromptDropdown(selectEl, folders, selectedFolder) {
+    if (!selectEl) return;
+    const doc = selectEl.ownerDocument || document;
+    selectEl.innerHTML = '';
+    const normalizedFolders = uniqueList(folders || []);
+    if (normalizedFolders.length === 0) {
+      const empty = doc.createElement('option');
+      empty.value = '';
+      empty.textContent = '-- No folders found --';
+      empty.disabled = true;
+      empty.selected = true;
+      selectEl.appendChild(empty);
+      return;
+    }
+
+    normalizedFolders.forEach((folder) => {
+      const option = doc.createElement('option');
+      option.value = folder;
+      option.textContent = folder;
+      selectEl.appendChild(option);
+    });
+
+    if (selectedFolder) {
+      const match = normalizedFolders.find((folder) => folder.toLowerCase() === selectedFolder.toLowerCase());
+      if (match) {
+        selectEl.value = match;
+        return;
+      }
+    }
+    selectEl.selectedIndex = 0;
+  }
+
+  async function showDefaultFolderPrompt({ folders = [], reason = '', autoRefresh = false, jobId = null } = {}) {
+    if (!isModalOpen()) return;
+
+    removeDefaultFolderPrompt();
+    isDefaultFolderPromptVisible = true;
+
+    const promptDocument = (() => {
+      try {
+        if (window.top?.document) return window.top.document;
+      } catch (_) {
+        // no-op
+      }
+      return document;
+    })();
+
+    const overlay = promptDocument.createElement('div');
+    overlay.id = 'waw-folder-prompt-overlay';
+    overlay.style.cssText = `
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 2147483647 !important;
+      isolation: isolate;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    `;
+
+    const panel = promptDocument.createElement('div');
+    panel.style.cssText = `
+      width: min(460px, 100%);
+      background: #fff;
+      color: #1f2937;
+      border-radius: 12px;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+      padding: 18px;
+      position: relative;
+      z-index: 2147483647;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    `;
+
+    panel.innerHTML = `
+      <div style="font-size:18px;font-weight:700;margin-bottom:8px;">Choose Default Shortlist Folder</div>
+      <div id="waw-folder-prompt-text" style="font-size:13px;color:#475569;margin-bottom:10px;">
+        ${reason || 'Select the folder to use when you shortlist with the up arrow key.'}
+      </div>
+      <select id="waw-folder-prompt-select" style="width:100%;padding:9px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;"></select>
+      <div id="waw-folder-prompt-status" style="min-height:18px;font-size:12px;color:#64748b;margin-top:8px;"></div>
+      <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+        <button id="waw-folder-prompt-refresh" style="padding:8px 10px;border:1px solid #cbd5e1;background:#f8fafc;border-radius:8px;cursor:pointer;">Refresh Folders</button>
+        <button id="waw-folder-prompt-save" style="padding:8px 12px;border:none;background:#2563eb;color:#fff;border-radius:8px;cursor:pointer;font-weight:600;">Save Default Folder</button>
+      </div>
+    `;
+
+    overlay.appendChild(panel);
+    (promptDocument.body || promptDocument.documentElement).appendChild(overlay);
+
+    const selectEl = panel.querySelector('#waw-folder-prompt-select');
+    const statusEl = panel.querySelector('#waw-folder-prompt-status');
+    const refreshBtn = panel.querySelector('#waw-folder-prompt-refresh');
+    const saveBtn = panel.querySelector('#waw-folder-prompt-save');
+
+    const updateStatus = (text, isError = false) => {
+      if (!statusEl) return;
+      statusEl.textContent = text || '';
+      statusEl.style.color = isError ? '#dc2626' : '#64748b';
+    };
+
+    const selectedSetting = cleanFolderName(settings?.shortlistFolderName || '');
+    populateDefaultFolderPromptDropdown(selectEl, folders, selectedSetting);
+
+    const refreshFolders = async () => {
+      refreshBtn.disabled = true;
+      updateStatus('Refreshing folders...');
+      try {
+        const refreshed = await FolderManager.getFolders({
+          forceOpen: true,
+          allowAutoOpenModal: true,
+          jobId: jobId || getCurrentModalJobId()
+        });
+        populateDefaultFolderPromptDropdown(selectEl, refreshed, selectedSetting);
+        updateStatus(refreshed.length > 0 ? `Found ${refreshed.length} folder${refreshed.length === 1 ? '' : 's'}` : 'No folders found');
+      } catch (error) {
+        updateStatus(error?.message || 'Failed to refresh folders', true);
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    };
+
+    refreshBtn.addEventListener('click', refreshFolders);
+
+    saveBtn.addEventListener('click', async () => {
+      const selected = cleanFolderName(selectEl?.value || '');
+      if (!selected) {
+        updateStatus('Select a folder first', true);
+        return;
+      }
+
+      try {
+        await persistShortlistFolderName(selected);
+        await setFolderSelectionRequired(false);
+        removeDefaultFolderPrompt();
+        showNotification(`Default folder set to "${selected}"`, 'add');
+      } catch (error) {
+        updateStatus(error?.message || 'Failed to save folder', true);
+      }
+    });
+
+    if (autoRefresh || folders.length === 0) {
+      await refreshFolders();
+    }
+  }
+
+  async function ensureDefaultShortlistFolderSelected({ reason = '', forcePrompt = false, jobId = null } = {}) {
+    if (!isModalOpen()) return false;
+
+    const selectedFolder = cleanFolderName(settings?.shortlistFolderName || '');
+    let folders = await getStoredFolders();
+    let isValid = !!selectedFolder && (folders.length === 0 || folderListContains(folders, selectedFolder));
+
+    if (isValid && !forcePrompt) {
+      await setFolderSelectionRequired(false);
+      removeDefaultFolderPrompt();
+      return true;
+    }
+
+    if (forcePrompt || folders.length === 0) {
+      folders = await FolderManager.getFolders({ forceOpen: true, allowAutoOpenModal: true, jobId: jobId || getCurrentModalJobId() });
+      isValid = !!selectedFolder && folderListContains(folders, selectedFolder);
+      if (isValid && !forcePrompt) {
+        await setFolderSelectionRequired(false);
+        removeDefaultFolderPrompt();
+        return true;
+      }
+    }
+
+    await setFolderSelectionRequired(true);
+    await showDefaultFolderPrompt({
+      folders,
+      reason: reason || (selectedFolder ? 'Your default folder is unavailable. Choose a new one.' : 'Choose a default shortlist folder to start shortlisting.'),
+      autoRefresh: folders.length === 0 || forcePrompt,
+      jobId: jobId || getCurrentModalJobId()
+    });
+    return false;
+  }
+
   // ============================================
   // Job Table Functions
   // ============================================
 
   function getAllJobLinks() {
-    const selectors = [
-      'tbody tr a.overflow--ellipsis',
-      'tbody[data-v-612a1958] a',
-      '.table__row--body a[href="javascript:void(0)"]',
-      'table tbody a[onclick]',
-      'tr.table__row--body a',
-      'tbody a'
+    const rows = Array.from(document.querySelectorAll('tbody tr, tr.table__row--body'));
+    const rowLinkSelectors = [
+      'a.overflow--ellipsis',
+      'td:nth-child(2) a',
+      'a[href="javascript:void(0)"]',
+      'a[onclick]'
     ];
 
-    let links = [];
-    for (const selector of selectors) {
-      const found = document.querySelectorAll(selector);
-      if (found.length > 0) {
-        links = found;
-        break;
+    const isLikelyJobLink = (link) => {
+      if (!link) return false;
+      const text = normalizeText(link.textContent);
+      if (!text || text.length > 220) return false;
+      if (link.querySelector('i.material-icons')) return false;
+      return true;
+    };
+
+    const links = [];
+    rows.forEach((row) => {
+      let selected = null;
+      for (const selector of rowLinkSelectors) {
+        const candidate = row.querySelector(selector);
+        if (isLikelyJobLink(candidate)) {
+          selected = candidate;
+          break;
+        }
       }
+      if (!selected) {
+        const candidates = Array.from(row.querySelectorAll('a'));
+        selected = candidates.find(isLikelyJobLink) || null;
+      }
+      if (selected) links.push(selected);
+    });
+
+    if (links.length === 0) {
+      document.querySelectorAll('tbody a').forEach((link) => {
+        if (isLikelyJobLink(link)) links.push(link);
+      });
     }
 
-    jobLinks = Array.from(links);
+    jobLinks = Array.from(new Set(links));
     jobLinks.forEach((link) => sanitizeJavascriptLink(link));
     console.log(`[WAW] Found ${jobLinks.length} job links`);
     return jobLinks;
@@ -928,78 +1405,120 @@
   // Shortlist Functions
   // ============================================
 
-  async function toggleShortlistJob(jobId, indicatorElement = null) {
-    const jobIdStr = String(jobId);
-    const wasShortlisted = shortlistedJobs.has(jobIdStr);
-
-    if (wasShortlisted) {
-      shortlistedJobs.delete(jobIdStr);
-      showNotification('Removed from shortlist', 'remove');
-      saveShortlist();
-      ensureShortlistIndicator(jobIdStr);
-      document.querySelectorAll(`.waw-shortlist-indicator[data-job-id="${jobId}"]`).forEach(el => {
-        el.innerHTML = '☆';
-        el.title = 'Add to shortlist';
-        el.style.color = '#999';
-      });
-      updateModalShortlistIndicator();
-      return;
-    } else {
-      const added = await addToWaterlooWorksFolder(jobId);
-      if (!added) {
-        return;
-      }
-      shortlistedJobs.add(jobIdStr);
-      showNotification('Added to shortlist!', 'add');
-    }
-
-    saveShortlist();
-    ensureShortlistIndicator(jobIdStr);
-    
-    // Update all indicators for this job
-    document.querySelectorAll(`.waw-shortlist-indicator[data-job-id="${jobId}"]`).forEach(el => {
-      const isNowShortlisted = shortlistedJobs.has(jobIdStr);
-      el.innerHTML = isNowShortlisted ? '★' : '☆';
-      el.title = isNowShortlisted ? 'Remove from shortlist' : 'Add to shortlist';
-      el.style.color = isNowShortlisted ? '#f39c12' : '#999';
+  function updateShortlistIndicators(jobId, isShortlisted) {
+    ensureShortlistIndicator(jobId);
+    document.querySelectorAll(`.waw-shortlist-indicator[data-job-id="${jobId}"]`).forEach((el) => {
+      el.innerHTML = isShortlisted ? '★' : '☆';
+      el.title = isShortlisted ? 'Remove from shortlist' : 'Add to shortlist';
+      el.style.color = isShortlisted ? '#f39c12' : '#999';
     });
-
-    // Update modal indicator if open
     updateModalShortlistIndicator();
   }
 
+  async function promptFolderSelection(jobId, reason = '') {
+    await ensureDefaultShortlistFolderSelected({
+      reason: reason || 'Choose a default shortlist folder to continue.',
+      forcePrompt: true,
+      jobId
+    });
+  }
+
   async function addToWaterlooWorksFolder(jobId) {
-    const folderName = normalizeText(settings?.shortlistFolderName || '');
+    const folderName = cleanFolderName(settings?.shortlistFolderName || '');
+
     if (!folderName) {
-      showNotification('Select or create a shortlist folder in the extension popup', 'info');
-      await FolderManager.getFolders({ forceOpen: true });
+      await promptFolderSelection(jobId, 'Choose a default shortlist folder before shortlisting.');
+      return false;
+    }
+
+    const modalReady = await ensureModalOpenForJob(jobId);
+    if (!modalReady) {
+      showNotification('Open a posting before shortlisting', 'info');
       return false;
     }
 
     let folders = await getStoredFolders();
-    if (!folders || folders.length === 0) {
-      folders = await FolderManager.getFolders({ forceOpen: true });
+    if (!folders || folders.length === 0 || !folderListContains(folders, folderName)) {
+      folders = await FolderManager.getFolders({ forceOpen: true, allowAutoOpenModal: true, jobId });
     }
 
     if (!folders || folders.length === 0) {
-      showNotification('No folders found. Create one in the extension popup.', 'info');
+      await promptFolderSelection(jobId, 'No valid folders found. Refresh and choose a default shortlist folder.');
       return false;
     }
 
     if (!folderListContains(folders, folderName)) {
-      showNotification('Select a shortlist folder in the extension popup', 'info');
+      await promptFolderSelection(jobId, 'Your default folder is unavailable. Choose a new default shortlist folder.');
       return false;
     }
 
-    const result = await FolderManager.selectFolder(folderName, jobId);
-    if (result?.success) {
-      console.log(`[WAW] Added job ${jobId} to folder ${folderName}`);
-      return true;
-    } else {
+    const result = await FolderManager.setFolderState(folderName, { jobId, desiredState: true });
+    if (!result?.success) {
       console.log(`[WAW] Could not select folder ${folderName}: ${result?.message || 'unknown error'}`);
-      showNotification('Could not select folder. Open a posting and try again.', 'error');
+      await promptFolderSelection(jobId, 'Could not use your current default folder. Choose another folder.');
       return false;
     }
+
+    await setFolderSelectionRequired(false);
+    return true;
+  }
+
+  async function removeFromWaterlooWorksFolder(jobId) {
+    const folderName = cleanFolderName(settings?.shortlistFolderName || '');
+    if (!folderName) {
+      await ensureDefaultShortlistFolderSelected({
+        reason: 'Choose a default shortlist folder.',
+        forcePrompt: true,
+        jobId
+      });
+      return false;
+    }
+
+    const modalReady = await ensureModalOpenForJob(jobId);
+    if (!modalReady) {
+      return false;
+    }
+
+    const result = await FolderManager.setFolderState(folderName, { jobId, desiredState: false });
+    if (!result?.success) {
+      await ensureDefaultShortlistFolderSelected({
+        reason: 'Could not access the current shortlist folder. Choose a new default folder.',
+        forcePrompt: true,
+        jobId
+      });
+      return false;
+    }
+    return true;
+  }
+
+  async function toggleShortlistJob(jobId, indicatorElement = null) {
+    const jobIdStr = String(jobId || '');
+    if (!jobIdStr) return false;
+    const wasShortlisted = shortlistedJobs.has(jobIdStr);
+
+    if (wasShortlisted) {
+      shortlistedJobs.delete(jobIdStr);
+      saveShortlist();
+      updateShortlistIndicators(jobIdStr, false);
+      const removedFromFolder = await removeFromWaterlooWorksFolder(jobIdStr);
+      if (removedFromFolder) {
+        showNotification('Removed from shortlist', 'remove');
+      } else {
+        showNotification('Removed locally. Could not sync folder removal.', 'info');
+      }
+      return true;
+    }
+
+    const added = await addToWaterlooWorksFolder(jobIdStr);
+    if (!added) {
+      return false;
+    }
+
+    shortlistedJobs.add(jobIdStr);
+    saveShortlist();
+    updateShortlistIndicators(jobIdStr, true);
+    showNotification('Added to shortlist!', 'add');
+    return true;
   }
 
   // ============================================
@@ -1485,7 +2004,7 @@
       font-size: 16px;
       font-weight: 600;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      z-index: 1000002;
+      z-index: 2147483000;
       box-shadow: 0 6px 30px rgba(0,0,0,0.4);
       display: flex;
       align-items: center;
@@ -1522,6 +2041,11 @@
               setTimeout(() => {
                 addModalNavigationUI();
                 syncCurrentIndexFromModal();
+                ensureDefaultShortlistFolderSelected({
+                  reason: 'Choose a default shortlist folder to start shortlisting.',
+                  forcePrompt: false,
+                  jobId: getCurrentModalJobId()
+                }).catch(() => {});
               }, 300);
             }
           }
@@ -1532,6 +2056,7 @@
             console.log('[WAW] Modal closed');
             const navUI = document.getElementById('waw-modal-nav');
             if (navUI) navUI.remove();
+            removeDefaultFolderPrompt();
           }
         }
       }
@@ -1564,13 +2089,10 @@
   function setupFolderObserver() {
     if (folderObserver) return;
     folderObserver = new MutationObserver(() => {
+      if (!isModalOpen()) return;
       const menus = getVisibleFolderMenus();
       if (menus.length === 0) return;
-      let folders = [];
-      menus.forEach((menu) => {
-        folders = folders.concat(extractFolderNamesFromMenu(menu));
-      });
-      folders = uniqueList(folders);
+      const folders = collectVisibleFolderNames();
       if (folders.length > 0) {
         saveFolderList(folders);
       }
@@ -1668,13 +2190,17 @@
       if (area !== 'sync') return;
       if (changes.shortlistFolderName) {
         settings = settings || {};
-        settings.shortlistFolderName = changes.shortlistFolderName.newValue;
+        settings.shortlistFolderName = cleanFolderName(changes.shortlistFolderName.newValue);
+        if (settings.shortlistFolderName) {
+          removeDefaultFolderPrompt();
+          setFolderSelectionRequired(false).catch(() => {});
+        }
       }
       if (changes.shortlistFolderReselect) {
         chrome.storage.sync.get({ shortlistFolderName: DEFAULT_SETTINGS.shortlistFolderName })
           .then((result) => {
             settings = settings || {};
-            settings.shortlistFolderName = result.shortlistFolderName || DEFAULT_SETTINGS.shortlistFolderName;
+            settings.shortlistFolderName = cleanFolderName(result.shortlistFolderName || DEFAULT_SETTINGS.shortlistFolderName);
           })
           .catch(() => {});
       }
@@ -1711,11 +2237,31 @@
     if (!request?.action) return;
 
     if (request.action === 'getShortlistFolders') {
-      FolderManager.getFolders({ forceOpen: !!request.forceOpen })
-        .then((folders) => {
+      if (!isModalOpen()) {
+        getStoredFolders()
+          .then((folders) => {
+            sendResponse({
+              folders: uniqueList(folders || []),
+              selectedFolder: cleanFolderName(settings?.shortlistFolderName || DEFAULT_SETTINGS.shortlistFolderName),
+              requiresModal: true,
+              message: 'Open a posting to select a folder'
+            });
+          })
+          .catch((error) => {
+            sendResponse({ error: error?.message || 'Failed to load saved folders' });
+          });
+        return true;
+      }
+
+      FolderManager.getFolders({ forceOpen: !!request.forceOpen, allowAutoOpenModal: false })
+        .then(async (folders) => {
+          if (folders.length > 0) {
+            await setFolderSelectionRequired(false);
+          }
           sendResponse({
             folders,
-            selectedFolder: settings?.shortlistFolderName || DEFAULT_SETTINGS.shortlistFolderName,
+            selectedFolder: cleanFolderName(settings?.shortlistFolderName || DEFAULT_SETTINGS.shortlistFolderName),
+            requiresModal: false,
             message: folders.length > 0 ? 'Folders found' : 'No folders found'
           });
         })
@@ -1726,24 +2272,26 @@
     }
 
     if (request.action === 'selectShortlistFolder') {
-      const name = normalizeText(request.name);
+      const name = cleanFolderName(request.name);
       if (name) {
         settings = settings || {};
         settings.shortlistFolderName = name;
         window.AzureStorage?.saveSettings({ shortlistFolderName: name });
+        setFolderSelectionRequired(false);
       }
       sendResponse({ success: true });
       return true;
     }
 
     if (request.action === 'createShortlistFolder') {
-      const name = normalizeText(request.name);
+      const name = cleanFolderName(request.name);
       FolderManager.createFolder(name)
         .then(async (result) => {
           if (result?.success && name) {
             settings = settings || {};
             settings.shortlistFolderName = name;
             await window.AzureStorage?.saveSettings({ shortlistFolderName: name });
+            await setFolderSelectionRequired(false);
           }
           sendResponse({
             success: !!result?.success,
