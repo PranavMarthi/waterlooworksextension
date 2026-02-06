@@ -64,7 +64,24 @@
            lower === 'new folder' ||
            lower === 'create folder' ||
            lower === 'add folder' ||
-           lower === 'create a folder';
+           lower === 'create a folder' ||
+           lower === 'create a new folder';
+  }
+
+  const SYSTEM_FOLDER_NAMES = [
+    'remove from search',
+    'removed from search',
+    'my applications',
+    'save'
+  ];
+
+  function isSystemFolderItem(text) {
+    const lower = normalizeText(text).toLowerCase();
+    return SYSTEM_FOLDER_NAMES.includes(lower);
+  }
+
+  function isExcludedFolderItem(text) {
+    return isCreateFolderItem(text) || isSystemFolderItem(text);
   }
 
   function uniqueList(list) {
@@ -176,7 +193,7 @@
     items.forEach((item) => {
       const text = normalizeText(item.textContent);
       if (!text) return;
-      if (isCreateFolderItem(text)) return;
+      if (isExcludedFolderItem(text)) return;
       if (text.length > 40) return;
       names.push(text);
     });
@@ -191,10 +208,122 @@
       const parent = checkbox.closest('li, .folder, .tree-node, .item, .list-item, .checkbox, .form-check') || checkbox.parentElement;
       let text = normalizeText(label?.textContent || parent?.textContent || '');
       if (!text || text.length > 40) return;
-      if (isCreateFolderItem(text)) return;
+      if (isExcludedFolderItem(text)) return;
       names.push(text);
     });
     return names;
+  }
+
+  /**
+   * Find the WaterlooWorks "My Jobs Folder" dialog and return it, or null.
+   * The dialog has a heading containing "My Jobs Folder" and toggle/switch items.
+   */
+  function findJobFolderDialog() {
+    // Strategy 1: Look for a visible dialog/panel with "My Jobs Folder" in a heading
+    const allContainers = document.querySelectorAll(
+      '[role="dialog"], .modal, .modal__content, .v-dialog, .v-card, .v-sheet, .sidebar, .drawer, .panel, .card, [class*="dialog"], [class*="modal"], [class*="drawer"]'
+    );
+    for (const container of allContainers) {
+      if (!isElementVisible(container)) continue;
+      const textContent = container.textContent || '';
+      if (/my jobs folder/i.test(textContent)) {
+        console.log('[WAW] Found "My Jobs Folder" dialog');
+        return container;
+      }
+    }
+
+    // Strategy 2: Look for any visible element whose heading/title contains "My Jobs Folder"
+    const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6, .title, .header, [class*="title"], [class*="header"]');
+    for (const heading of headings) {
+      if (!isElementVisible(heading)) continue;
+      if (/my jobs folder/i.test(normalizeText(heading.textContent))) {
+        // Walk up to find the dialog container
+        const dialog = heading.closest('[role="dialog"], .modal, .modal__content, .v-dialog, .v-card, .v-sheet, .sidebar, .drawer, .panel, .card, [class*="dialog"], [class*="modal"]')
+          || heading.parentElement?.parentElement;
+        if (dialog) {
+          console.log('[WAW] Found "My Jobs Folder" dialog via heading');
+          return dialog;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Extract user-created folder names from the "My Jobs Folder" dialog.
+   * Filters out "Create a new folder", system folders, and the "Save" button.
+   */
+  function extractFoldersFromJobFolderDialog(dialog) {
+    if (!dialog) return [];
+    const names = [];
+
+    // The dialog contains toggle/switch items. Each toggle item typically has:
+    // - A label/text element
+    // - A checkbox/switch input
+    // Look for all text elements near toggle controls
+    const toggleItems = dialog.querySelectorAll(
+      '.v-input, .v-switch, .v-checkbox, [class*="switch"], [class*="toggle"], [class*="list-item"], [class*="list__tile"], li, .row, .form-check'
+    );
+
+    if (toggleItems.length > 0) {
+      for (const item of toggleItems) {
+        const text = normalizeText(item.textContent);
+        if (!text || text.length > 60) continue;
+        if (isExcludedFolderItem(text)) continue;
+        names.push(text);
+      }
+    }
+
+    // Fallback: look for checkboxes/inputs with labels
+    if (names.length === 0) {
+      const inputs = dialog.querySelectorAll('input[type="checkbox"], input[role="switch"], [role="switch"]');
+      for (const input of inputs) {
+        const label = input.id ? dialog.querySelector(`label[for="${input.id}"]`) : null;
+        const parent = input.closest('li, .v-input, [class*="switch"], [class*="toggle"], .row, .form-check') || input.parentElement;
+        const text = normalizeText(label?.textContent || parent?.textContent || '');
+        if (!text || text.length > 60) continue;
+        if (isExcludedFolderItem(text)) continue;
+        names.push(text);
+      }
+    }
+
+    // Last fallback: get all visible text nodes that look like folder names
+    if (names.length === 0) {
+      const allText = dialog.querySelectorAll('span, label, div, p');
+      for (const el of allText) {
+        // Only direct text, not deeply nested
+        if (el.children.length > 2) continue;
+        const text = normalizeText(el.textContent);
+        if (!text || text.length > 40 || text.length < 2) continue;
+        if (isExcludedFolderItem(text)) continue;
+        // Skip if it's a heading, button, or the job info header
+        if (el.closest('button, h1, h2, h3, h4, h5, h6, [class*="header"]')) continue;
+        names.push(text);
+      }
+    }
+
+    return uniqueList(names);
+  }
+
+  /**
+   * Close the "My Jobs Folder" dialog if it's open.
+   */
+  function closeJobFolderDialog() {
+    const dialog = findJobFolderDialog();
+    if (!dialog) return;
+    // Try the X/close button
+    const closeBtn = dialog.querySelector('button[aria-label="Close"], .close, [class*="close"], button:has(i.material-icons)');
+    if (closeBtn) {
+      const icon = closeBtn.querySelector('i.material-icons');
+      if (!icon || icon.textContent.trim() === 'close') {
+        closeBtn.click();
+        return;
+      }
+    }
+    // Try clicking outside / backdrop
+    const backdrop = document.querySelector('.v-overlay__scrim, .modal-backdrop, .overlay');
+    if (backdrop) backdrop.click();
   }
 
   function findFolderContainers() {
@@ -363,60 +492,125 @@
     return null;
   }
 
+  /**
+   * Wait for the "My Jobs Folder" dialog to appear after clicking the folder button.
+   * Returns the dialog element or null on timeout.
+   */
+  async function waitForJobFolderDialog(timeout = 2000) {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+      const dialog = findJobFolderDialog();
+      if (dialog) return dialog;
+      await sleep(100);
+    }
+    return null;
+  }
+
+  /**
+   * Find the toggle/switch element for a specific folder name inside the dialog.
+   */
+  function findFolderToggleInDialog(dialog, name) {
+    if (!dialog) return null;
+    const target = normalizeText(name).toLowerCase();
+    if (!target) return null;
+
+    // Look for toggle items containing the folder name
+    const items = dialog.querySelectorAll(
+      '.v-input, .v-switch, .v-checkbox, [class*="switch"], [class*="toggle"], [class*="list-item"], [class*="list__tile"], li, .row, .form-check, label'
+    );
+    for (const item of items) {
+      const text = normalizeText(item.textContent).toLowerCase();
+      if (text === target || text.startsWith(target)) {
+        // Find the actual clickable input/switch inside
+        const input = item.querySelector('input[type="checkbox"], input[role="switch"], [role="switch"], .v-input--switch, .v-selection-control');
+        if (input) return input;
+        return item; // Click the item itself
+      }
+    }
+
+    // Fallback: search by text match
+    return findFolderMenuItemByName(name);
+  }
+
+  /**
+   * Find the Save button inside the folder dialog.
+   */
+  function findSaveButtonInDialog(dialog) {
+    if (!dialog) return null;
+    const buttons = dialog.querySelectorAll('button, input[type="button"], input[type="submit"]');
+    for (const btn of buttons) {
+      const text = normalizeText(btn.textContent || btn.value).toLowerCase();
+      if (text === 'save') return btn;
+    }
+    return null;
+  }
+
   const FolderManager = {
     async getFolders({ forceOpen = false } = {}) {
       let folders = [];
-      let openedModal = false;
-      const menus = getVisibleFolderMenus();
-      menus.forEach((menu) => {
-        folders = folders.concat(extractFolderNamesFromMenu(menu));
-      });
+      let openedJobModal = false;
+      let openedFolderDialog = false;
 
+      // Step 1: Check if the "My Jobs Folder" dialog is already open
+      let dialog = findJobFolderDialog();
+      if (dialog) {
+        folders = extractFoldersFromJobFolderDialog(dialog);
+        console.log('[WAW] Extracted folders from existing dialog:', folders);
+      }
+
+      // Step 2: If forceOpen and no folders yet, open the dialog
       if (folders.length === 0 && forceOpen) {
+        // Ensure a job modal is open (needed to access the folder button)
         if (!isModalOpen()) {
           getAllJobLinks();
           if (jobLinks[0]) {
             safeClick(jobLinks[0]);
-            openedModal = await waitForModalOpen(2000);
+            openedJobModal = await waitForModalOpen(2000);
           }
         }
+
+        // Click the folder button to open the dialog
         const opened = await openFolderMenuForJob();
         if (opened) {
-          await sleep(200);
+          await sleep(300);
+          // Wait for the "My Jobs Folder" dialog to appear
+          dialog = await waitForJobFolderDialog(2000);
+          if (dialog) {
+            openedFolderDialog = true;
+            folders = extractFoldersFromJobFolderDialog(dialog);
+            console.log('[WAW] Extracted folders from forced dialog:', folders);
+          }
+        }
+
+        // If targeted extraction failed, fall back to generic approach
+        if (folders.length === 0) {
           getVisibleFolderMenus().forEach((menu) => {
             folders = folders.concat(extractFolderNamesFromMenu(menu));
           });
         }
       }
 
+      // Step 3: Fall back to generic container/checkbox scanning
       if (folders.length === 0) {
         const containers = findFolderContainers();
         containers.forEach((container) => {
           folders = folders.concat(extractFolderNamesFromCheckboxes(container));
         });
-
-        if (folders.length === 0) {
-          const labels = Array.from(document.querySelectorAll('label'))
-            .filter((label) => isElementVisible(label))
-            .filter((label) => {
-              const text = normalizeText(label.textContent);
-              if (!text || text.length > 40 || isCreateFolderItem(text)) return false;
-              const direct = label.querySelector('input[type="checkbox"]');
-              const byFor = label.htmlFor ? document.getElementById(label.htmlFor) : null;
-              return !!direct || (byFor && byFor.type === 'checkbox');
-            });
-          if (labels.length > 0) {
-            folders = labels.map((label) => normalizeText(label.textContent));
-          }
-        }
       }
 
-      folders = uniqueList(folders);
+      // Filter out any system/excluded items that slipped through
+      folders = uniqueList(folders).filter((name) => !isExcludedFolderItem(name));
+
       if (folders.length > 0) {
         await saveFolderList(folders);
       }
 
-      if (openedModal) {
+      // Clean up: close the folder dialog and job modal if we opened them
+      if (openedFolderDialog) {
+        closeJobFolderDialog();
+        await sleep(150);
+      }
+      if (openedJobModal) {
         const closeBtn = document.querySelector('div[data-v-70e7ded6-s] button[aria-label="Close"], .modal__close, button.close');
         if (closeBtn) {
           safeClick(closeBtn);
@@ -429,9 +623,32 @@
       const target = normalizeText(name);
       if (!target) return { success: false, message: 'Missing folder name' };
 
+      // Open the folder dialog
       await openFolderMenuForJob(jobId);
-      await sleep(150);
+      await sleep(300);
 
+      // Wait for the "My Jobs Folder" dialog
+      let dialog = await waitForJobFolderDialog(2000);
+      if (dialog) {
+        // Find and click the toggle for this folder
+        const toggle = findFolderToggleInDialog(dialog, target);
+        if (toggle) {
+          safeClick(toggle);
+          await sleep(100);
+          // Click Save
+          const saveBtn = findSaveButtonInDialog(dialog);
+          if (saveBtn) {
+            safeClick(saveBtn);
+            console.log(`[WAW] Toggled folder "${target}" and clicked Save`);
+            return { success: true };
+          }
+          // Even without a Save button, the toggle click might be enough
+          console.log(`[WAW] Toggled folder "${target}" (no Save button found)`);
+          return { success: true };
+        }
+      }
+
+      // Fallback: try the old generic menu item approach
       let item = findFolderMenuItemByName(target);
       if (!item) {
         await sleep(150);
@@ -440,7 +657,7 @@
         item = findFolderMenuItemByName(target);
       }
       if (!item) {
-        return { success: false, message: 'Folder not found' };
+        return { success: false, message: 'Folder not found in dialog' };
       }
       safeClick(item);
       return { success: true };
